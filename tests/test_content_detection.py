@@ -1,10 +1,10 @@
-from pathlib import Path
-import pytest
-import pymupdf
 import json
+from pathlib import Path
 
-from filesystem_rag_mcp.detector import detect_file_type
+import pymupdf
+
 from filesystem_rag_mcp.converter import convert_file_to_markdown
+from filesystem_rag_mcp.detector import detect_file_type
 from filesystem_rag_mcp.security import is_indexable_file
 
 

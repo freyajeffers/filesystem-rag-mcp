@@ -1,7 +1,6 @@
-from pathlib import Path
 import sqlite3
 import zipfile
-import pytest
+from pathlib import Path
 
 from filesystem_rag_mcp.converter import convert_file_to_markdown
 

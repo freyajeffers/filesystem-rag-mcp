@@ -14,7 +14,9 @@ class QueryCache:
     def __init__(self, max_entries: int = 1000, ttl_seconds: float = 300.0) -> None:
         self.max_entries = max_entries
         self.ttl_seconds = ttl_seconds
-        self._cache: collections.OrderedDict[str, tuple[float, int, dict[str, Any]]] = collections.OrderedDict()
+        self._cache: collections.OrderedDict[str, tuple[float, int, dict[str, Any]]] = (
+            collections.OrderedDict()
+        )
         self._version = 0
 
     def _make_key(self, **kwargs: Any) -> str:

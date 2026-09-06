@@ -1,4 +1,3 @@
-import asyncio
 from pathlib import Path
 
 import pytest
@@ -7,7 +6,7 @@ from filesystem_rag_mcp.cli import parse_args
 from filesystem_rag_mcp.config import Settings
 from filesystem_rag_mcp.converter import convert_file_to_markdown
 from filesystem_rag_mcp.server import _ServerState
-from filesystem_rag_mcp.vector import Embedder, VectorStore
+from filesystem_rag_mcp.vector import Embedder
 
 
 @pytest.mark.asyncio

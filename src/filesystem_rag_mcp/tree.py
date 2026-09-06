@@ -60,8 +60,7 @@ def list_directory(
 
                 # Check pattern filter
                 if pattern and not (
-                    fnmatch.fnmatch(item.name, pattern)
-                    or fnmatch.fnmatch(rel_item, pattern)
+                    fnmatch.fnmatch(item.name, pattern) or fnmatch.fnmatch(rel_item, pattern)
                 ):
                     if is_dir:
                         _scan(item, depth + 1)

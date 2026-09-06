@@ -10,7 +10,9 @@ from filesystem_rag_mcp.server import _ServerState
 @pytest.mark.asyncio
 async def test_live_directory_watcher_and_reranking(tmp_path: Path):
     doc1 = tmp_path / "article.txt"
-    doc1.write_text("General introduction about distributed consensus mechanisms.", encoding="utf-8")
+    doc1.write_text(
+        "General introduction about distributed consensus mechanisms.", encoding="utf-8"
+    )
 
     settings = Settings(root_dir=tmp_path, data_dir=tmp_path / ".fsrag")
     state = _ServerState(settings)
@@ -29,7 +31,10 @@ async def test_live_directory_watcher_and_reranking(tmp_path: Path):
 
     # Trigger live watcher by creating a new document
     doc2 = tmp_path / "raft.txt"
-    doc2.write_text("The Raft consensus algorithm is designed to be understandable and robust.", encoding="utf-8")
+    doc2.write_text(
+        "The Raft consensus algorithm is designed to be understandable and robust.",
+        encoding="utf-8",
+    )
 
     # Await watcher debounce
     await asyncio.sleep(2.0)

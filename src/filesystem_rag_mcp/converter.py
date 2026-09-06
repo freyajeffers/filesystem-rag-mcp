@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import csv
 import email
-import io
+import hashlib
 import json
 import sqlite3
 import tarfile
@@ -49,10 +49,11 @@ def _get_markitdown():
 # Specialized Handlers
 # ---------------------------------------------------------------------------
 
+
 def _convert_ipynb(path: Path) -> str:
     import nbformat
 
-    with open(path, "r", encoding="utf-8", errors="replace") as f:
+    with open(path, encoding="utf-8", errors="replace") as f:
         nb = nbformat.read(f, as_version=4)
 
     lines: list[str] = [f"# Notebook: {path.name}\n"]
@@ -81,7 +82,7 @@ def _convert_ipynb(path: Path) -> str:
 
 
 def _convert_csv(path: Path) -> str:
-    with open(path, "r", encoding="utf-8", errors="replace") as f:
+    with open(path, encoding="utf-8", errors="replace") as f:
         reader = csv.reader(f)
         rows = list(reader)
 
@@ -94,10 +95,14 @@ def _convert_csv(path: Path) -> str:
     lines.append("| " + " | ".join(["---"] * len(header)) + " |")
     for row in rows[1:101]:
         padded = row + [""] * (len(header) - len(row))
-        lines.append("| " + " | ".join(cell.replace("\n", " ").strip() for cell in padded[: len(header)]) + " |")
+        lines.append(
+            "| "
+            + " | ".join(cell.replace("\n", " ").strip() for cell in padded[: len(header)])
+            + " |"
+        )
 
     if len(rows) > 101:
-        lines.append(f"\n*(Showing 100 of {len(rows)-1} rows)*")
+        lines.append(f"\n*(Showing 100 of {len(rows) - 1} rows)*")
 
     return "\n".join(lines)
 
@@ -149,7 +154,9 @@ def _convert_docx(path: Path) -> str:
     for table in doc.tables:
         lines.append("\n")
         for row in table.rows:
-            lines.append("| " + " | ".join(cell.text.strip().replace("\n", " ") for cell in row.cells) + " |")
+            lines.append(
+                "| " + " | ".join(cell.text.strip().replace("\n", " ") for cell in row.cells) + " |"
+            )
     return "\n".join(lines)
 
 
@@ -187,9 +194,13 @@ def _convert_xlsx(path: Path) -> str:
         for r in rows[1:51]:
             row_cells = [str(c) if c is not None else "" for c in r]
             padded = row_cells + [""] * (len(header) - len(row_cells))
-            lines.append("| " + " | ".join(c.replace("\n", " ").strip() for c in padded[: len(header)]) + " |")
+            lines.append(
+                "| "
+                + " | ".join(c.replace("\n", " ").strip() for c in padded[: len(header)])
+                + " |"
+            )
         if len(rows) > 51:
-            lines.append(f"\n*(Showing 50 of {len(rows)-1} rows)*\n")
+            lines.append(f"\n*(Showing 50 of {len(rows) - 1} rows)*\n")
     wb.close()
     return "\n".join(lines)
 
@@ -213,7 +224,12 @@ def _convert_sqlite(path: Path) -> str:
     try:
         conn = sqlite3.connect(f"file:{path.resolve()}?mode=ro", uri=True)
         cursor = conn.cursor()
-        tables = [row[0] for row in cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").fetchall()]
+        tables = [
+            row[0]
+            for row in cursor.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+            ).fetchall()
+        ]
         if not tables:
             return f"# SQLite Database: {path.name}\n\n*(Empty Database with no tables)*"
 
@@ -282,7 +298,9 @@ def _convert_audio_media(path: Path) -> str:
             if audio.info:
                 lines.append(f"- **Length:** {getattr(audio.info, 'length', 0):.2f} seconds")
                 lines.append(f"- **Bitrate:** {getattr(audio.info, 'bitrate', 'Unknown')}")
-                lines.append(f"- **Sample Rate:** {getattr(audio.info, 'sample_rate', 'Unknown')} Hz")
+                lines.append(
+                    f"- **Sample Rate:** {getattr(audio.info, 'sample_rate', 'Unknown')} Hz"
+                )
                 lines.append(f"- **Channels:** {getattr(audio.info, 'channels', 'Unknown')}")
 
             if audio.tags:
@@ -335,6 +353,7 @@ def _convert_email(path: Path) -> str:
                         html_text = ""
                     if html_text:
                         from bs4 import BeautifulSoup
+
                         soup = BeautifulSoup(html_text, "html.parser")
                         body_parts.append(soup.get_text(separator="\n\n"))
         else:
@@ -369,6 +388,7 @@ def _convert_image_meta(path: Path) -> str:
             exif = img.getexif()
             if exif:
                 from PIL.ExifTags import TAGS
+
                 lines.append("\n## EXIF Metadata\n")
                 for tag_id, val in exif.items():
                     tag_name = TAGS.get(tag_id, str(tag_id))
@@ -390,6 +410,7 @@ def _convert_binary_hexdump(path: Path) -> str:
 
     # Extract printable ASCII strings
     import re
+
     strings = re.findall(rb"[A-Za-z0-9_\-\.\:\/\@\=\+\?\!\& ]{4,}", data[:65536])
     if strings:
         lines.append("## Embedded Printable Strings (Sample)\n")
@@ -411,10 +432,8 @@ def _convert_binary_hexdump(path: Path) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Master Conversion Dispatcher
+# Public interface
 # ---------------------------------------------------------------------------
-
-import hashlib
 
 
 def convert_file_to_markdown(path: Path, max_bytes: int | None = None) -> str:
@@ -430,7 +449,9 @@ def convert_file_to_markdown(path: Path, max_bytes: int | None = None) -> str:
         try:
             with path.open("rb") as f:
                 head = f.read(100_000)
-            sample_ascii = "".join(chr(b) if 32 <= b <= 126 or b in (9, 10, 13) else "." for b in head[:5000])
+            sample_ascii = "".join(
+                chr(b) if 32 <= b <= 126 or b in (9, 10, 13) else "." for b in head[:5000]
+            )
             return (
                 f"# {path.name} (Large File Notice)\n\n"
                 f"> **Warning**: File size ({size:,} bytes) exceeds safety conversion limit ({limit:,} bytes).\n"

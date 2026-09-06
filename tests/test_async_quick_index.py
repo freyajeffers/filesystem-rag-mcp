@@ -1,9 +1,9 @@
-import asyncio
 from pathlib import Path
+
 import pytest
 
 from filesystem_rag_mcp.config import Settings
-from filesystem_rag_mcp.server import _ServerState, build_server
+from filesystem_rag_mcp.server import _ServerState
 
 
 @pytest.mark.asyncio

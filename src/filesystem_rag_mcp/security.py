@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .config import Settings
+from .detector import detect_file_type
 
 
 class PathSecurityError(ValueError):
@@ -42,54 +42,52 @@ def safe_resolve(root: Path, candidate: str | Path) -> Path:
         resolved_candidate.relative_to(resolved_root)
     except ValueError as exc:
         raise PathSecurityError(
-            f"Path {candidate!r} resolves outside the configured root "
-            f"{resolved_root!r}"
+            f"Path {candidate!r} resolves outside the configured root {resolved_root!r}"
         ) from exc
     return resolved_candidate
 
 
-SUPPORTED_CONVERTIBLE_EXTENSIONS: frozenset[str] = frozenset({
-    ".pdf",
-    ".docx",
-    ".pptx",
-    ".xlsx",
-    ".xls",
-    ".ipynb",
-    ".html",
-    ".htm",
-    ".rtf",
-    ".epub",
-    ".csv",
-    ".tsv",
-    ".json",
-    ".yaml",
-    ".yml",
-    ".toml",
-    ".xml",
-    ".md",
-    ".markdown",
-    ".rst",
-    ".txt",
-    ".py",
-    ".js",
-    ".ts",
-    ".tsx",
-    ".jsx",
-    ".go",
-    ".rs",
-    ".java",
-    ".c",
-    ".cpp",
-    ".h",
-    ".hpp",
-    ".sh",
-    ".bash",
-    ".zsh",
-    ".sql",
-})
-
-
-from .detector import detect_file_type
+SUPPORTED_CONVERTIBLE_EXTENSIONS: frozenset[str] = frozenset(
+    {
+        ".pdf",
+        ".docx",
+        ".pptx",
+        ".xlsx",
+        ".xls",
+        ".ipynb",
+        ".html",
+        ".htm",
+        ".rtf",
+        ".epub",
+        ".csv",
+        ".tsv",
+        ".json",
+        ".yaml",
+        ".yml",
+        ".toml",
+        ".xml",
+        ".md",
+        ".markdown",
+        ".rst",
+        ".txt",
+        ".py",
+        ".js",
+        ".ts",
+        ".tsx",
+        ".jsx",
+        ".go",
+        ".rs",
+        ".java",
+        ".c",
+        ".cpp",
+        ".h",
+        ".hpp",
+        ".sh",
+        ".bash",
+        ".zsh",
+        ".sql",
+    }
+)
 
 
 def is_indexable_file(path: Path, allow_binary: bool = False) -> bool:
@@ -98,8 +96,6 @@ def is_indexable_file(path: Path, allow_binary: bool = False) -> bool:
     if type_info.is_convertible or type_info.is_text:
         return True
     return allow_binary
-
-
 
 
 def is_text_file(path: Path, sniff_bytes: int = 8192) -> bool:
@@ -128,7 +124,7 @@ def is_text_file(path: Path, sniff_bytes: int = 8192) -> bool:
     except UnicodeDecodeError:
         try:
             decoded = buf.decode("latin-1")
-        except Exception:  # noqa: BLE001 - last-resort sniff
+        except Exception:
             return False
     # Reject if it contains too many control characters (likely binary)
     control = sum(1 for c in decoded if ord(c) < 32 and c not in "\n\r\t\f\v")

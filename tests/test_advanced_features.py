@@ -1,4 +1,3 @@
-import asyncio
 from pathlib import Path
 
 import pytest
@@ -12,7 +11,9 @@ async def test_batch_read_and_grep_tools(tmp_path: Path):
     sub = tmp_path / "src"
     sub.mkdir()
     f1 = sub / "service.py"
-    f1.write_text("class PaymentProcessor:\n    def process_transaction(self, amount):\n        return True\n")
+    f1.write_text(
+        "class PaymentProcessor:\n    def process_transaction(self, amount):\n        return True\n"
+    )
 
     f2 = sub / "models.py"
     f2.write_text("class TransactionRecord:\n    id: str\n    amount: float\n")
@@ -33,7 +34,9 @@ async def test_batch_read_and_grep_tools(tmp_path: Path):
     assert len(match["context"]) == 3  # line 1, 2 (match), 3
 
     # 2. Test read_files_batch
-    batch_res = await state.read_files_batch(rel_paths=["src/service.py", "src/models.py", "nonexistent.py"])
+    batch_res = await state.read_files_batch(
+        rel_paths=["src/service.py", "src/models.py", "nonexistent.py"]
+    )
     assert batch_res["success"] is True
     assert batch_res["count"] == 3
     assert "src/service.py" in batch_res["files"]

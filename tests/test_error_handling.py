@@ -1,4 +1,5 @@
 from pathlib import Path
+
 import pytest
 
 from filesystem_rag_mcp.config import Settings

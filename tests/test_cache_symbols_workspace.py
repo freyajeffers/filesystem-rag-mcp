@@ -1,8 +1,10 @@
 from pathlib import Path
+
 import pytest
+
 from filesystem_rag_mcp.config import Settings
-from filesystem_rag_mcp.server import _ServerState
 from filesystem_rag_mcp.query_cache import QueryCache
+from filesystem_rag_mcp.server import _ServerState
 from filesystem_rag_mcp.symbols import search_symbols
 
 

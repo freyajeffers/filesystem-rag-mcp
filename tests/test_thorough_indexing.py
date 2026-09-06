@@ -1,5 +1,6 @@
 import asyncio
 from pathlib import Path
+
 import pytest
 
 from filesystem_rag_mcp.config import Settings
@@ -22,7 +23,9 @@ async def test_quick_and_thorough_parallel_indexing(tmp_path: Path):
     assert state._quick_index_ready.is_set()
 
     # Search with pure full-text (alpha=0.0) needs only quick index
-    res_ft = await state.search(query="ThoroughDeepVectorSemanticEmbeddingVerification2026", top_k=5, alpha=0.0)
+    res_ft = await state.search(
+        query="ThoroughDeepVectorSemanticEmbeddingVerification2026", top_k=5, alpha=0.0
+    )
     assert res_ft["success"] is True
     assert len(res_ft["results"]) > 0
 

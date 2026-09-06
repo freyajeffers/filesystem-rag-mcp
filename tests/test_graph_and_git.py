@@ -1,5 +1,5 @@
-from pathlib import Path
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -90,7 +90,9 @@ def test_git_search_tool(tmp_path: Path):
     test_file = tmp_path / "hello.txt"
     test_file.write_text("line 1\nline 2\n")
     subprocess.run(["git", "add", "."], cwd=tmp_path, check=True)
-    subprocess.run(["git", "commit", "-m", "Initial commit for git search test"], cwd=tmp_path, check=True)
+    subprocess.run(
+        ["git", "commit", "-m", "Initial commit for git search test"], cwd=tmp_path, check=True
+    )
 
     settings = Settings(
         root_dir=tmp_path,

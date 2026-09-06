@@ -13,9 +13,8 @@ with cosine-similarity vector scores (which live in [-1, 1], typically
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Iterable
 
 from whoosh import index
 from whoosh.analysis import StemmingAnalyzer
@@ -95,7 +94,11 @@ class FullTextStore:
             for item in s.iter_docs():
                 # iter_docs yields (docnum, stored_fields) tuples in modern Whoosh
                 if isinstance(item, tuple):
-                    stored = item[1] if len(item) > 1 and isinstance(item[1], dict) else s.stored_fields(item[0])
+                    stored = (
+                        item[1]
+                        if len(item) > 1 and isinstance(item[1], dict)
+                        else s.stored_fields(item[0])
+                    )
                 else:
                     stored = s.stored_fields(item)
                 cid = stored.get("chunk_id")
@@ -103,15 +106,11 @@ class FullTextStore:
                     ids.add(cid)
         return ids
 
-    def search(
-        self, query: str, top_k: int, fuzzy: bool = False
-    ) -> list[TextHit]:
+    def search(self, query: str, top_k: int, fuzzy: bool = False) -> list[TextHit]:
         if not query.strip():
             return []
         with self._ix.searcher() as s:
-            parser = MultifieldParser(
-                ["text", "rel_path"], schema=self._ix.schema, group=OrGroup
-            )
+            parser = MultifieldParser(["text", "rel_path"], schema=self._ix.schema, group=OrGroup)
             if fuzzy:
                 parser.add_plugin(FuzzyTermPlugin())
                 # Append ~1 fuzzy operator to single terms if not already present

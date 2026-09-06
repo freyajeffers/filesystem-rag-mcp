@@ -38,38 +38,42 @@ class FileTypeInfo:
     is_convertible: bool
 
 
-CONVERTIBLE_LABELS: frozenset[str] = frozenset({
-    "pdf",
-    "docx",
-    "doc",
-    "pptx",
-    "ppt",
-    "xlsx",
-    "xls",
-    "epub",
-    "ipynb",
-    "html",
-    "htm",
-    "xml",
-    "svg",
-    "rtf",
-    "csv",
-    "tsv",
-    "json",
-    "jsonl",
-    "yaml",
-    "toml",
-    "markdown",
-    "txt",
-    "rst",
-    "latex",
-})
+CONVERTIBLE_LABELS: frozenset[str] = frozenset(
+    {
+        "pdf",
+        "docx",
+        "doc",
+        "pptx",
+        "ppt",
+        "xlsx",
+        "xls",
+        "epub",
+        "ipynb",
+        "html",
+        "htm",
+        "xml",
+        "svg",
+        "rtf",
+        "csv",
+        "tsv",
+        "json",
+        "jsonl",
+        "yaml",
+        "toml",
+        "markdown",
+        "txt",
+        "rst",
+        "latex",
+    }
+)
 
-CONVERTIBLE_GROUPS: frozenset[str] = frozenset({
-    "document",
-    "code",
-    "text",
-})
+CONVERTIBLE_GROUPS: frozenset[str] = frozenset(
+    {
+        "document",
+        "code",
+        "text",
+    }
+)
 
 
 def detect_file_type(path: Path) -> FileTypeInfo:
@@ -151,7 +155,9 @@ def detect_file_type(path: Path) -> FileTypeInfo:
                         )
                     if "mimetype" in namelist:
                         try:
-                            mimetype_data = zf.read("mimetype").decode("utf-8", errors="ignore").strip()
+                            mimetype_data = (
+                                zf.read("mimetype").decode("utf-8", errors="ignore").strip()
+                            )
                             if "application/epub+zip" in mimetype_data:
                                 return FileTypeInfo(
                                     label="epub",

@@ -34,15 +34,13 @@ import secrets
 import sqlite3
 import time
 from base64 import urlsafe_b64encode
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from threading import Lock, RLock
+from threading import RLock
 from typing import Any
 from urllib.parse import urlparse
 
 import jwt
-from pydantic import AnyUrl
-
 from mcp.server.auth.provider import (
     AccessToken,
     AuthorizationCode,
@@ -53,10 +51,10 @@ from mcp.server.auth.provider import (
     OAuthToken,
     RefreshToken,
     RegistrationError,
-    TokenError,
     construct_redirect_uri,
 )
 from mcp.shared.auth import OAuthMetadata, ProtectedResourceMetadata
+from pydantic import AnyUrl
 
 from .config import Settings
 from .logging_setup import get_logger
@@ -140,8 +138,7 @@ class _OAuthStore:
         payload = client.model_dump(mode="json")
         with self._lock, self._connect() as conn:
             conn.execute(
-                "INSERT OR REPLACE INTO clients (client_id, payload, created_at) "
-                "VALUES (?, ?, ?)",
+                "INSERT OR REPLACE INTO clients (client_id, payload, created_at) VALUES (?, ?, ?)",
                 (client.client_id, json.dumps(payload), int(time.time())),
             )
 
@@ -219,7 +216,9 @@ class _OAuthStore:
                 (rt.token, rt.client_id, json.dumps(payload), rt.expires_at),
             )
 
-    def consume_refresh(self, token: str) -> tuple[OAuthClientInformationFull, StoredRefreshToken] | None:
+    def consume_refresh(
+        self, token: str
+    ) -> tuple[OAuthClientInformationFull, StoredRefreshToken] | None:
         """Return and delete a refresh token row + its client."""
         with self._lock, self._connect() as conn:
             row = conn.execute(
@@ -229,9 +228,7 @@ class _OAuthStore:
             if not row:
                 return None
             if row["expires_at"] < int(time.time()):
-                conn.execute(
-                    "DELETE FROM refresh_tokens WHERE token = ?", (token,)
-                )
+                conn.execute("DELETE FROM refresh_tokens WHERE token = ?", (token,))
                 return None
             client = self.get_client(row["client_id"])
             if client is None:
@@ -257,9 +254,7 @@ class _OAuthStore:
         now_i = int(now)
         with self._lock, self._connect() as conn:
             conn.execute("DELETE FROM auth_codes WHERE expires_at < ?", (now,))
-            conn.execute(
-                "DELETE FROM refresh_tokens WHERE expires_at < ?", (now_i,)
-            )
+            conn.execute("DELETE FROM refresh_tokens WHERE expires_at < ?", (now_i,))
 
 
 # ---------------------------------------------------------------------------
@@ -332,7 +327,11 @@ class MCPFileRAGAuthProvider(
 
         # MCP 2026-07-28 Spec: Client ID Metadata Documents
         # If client_id is an HTTPS URL, attempt to resolve the Client ID Metadata Document
-        if client_id.startswith("https://") or client_id.startswith("http://127.0.0.1") or client_id.startswith("http://localhost"):
+        if (
+            client_id.startswith("https://")
+            or client_id.startswith("http://127.0.0.1")
+            or client_id.startswith("http://localhost")
+        ):
             try:
                 import httpx
 
@@ -356,7 +355,9 @@ class MCPFileRAGAuthProvider(
                         self.store.save_client(resolved_client)
                         return resolved_client
             except Exception as exc:
-                log.warning("client_metadata_document_fetch_failed", client_id=client_id, error=str(exc))
+                log.warning(
+                    "client_metadata_document_fetch_failed", client_id=client_id, error=str(exc)
+                )
         return None
 
     async def register_client(self, client_info: OAuthClientInformationFull) -> None:
@@ -409,9 +410,7 @@ class MCPFileRAGAuthProvider(
                 subject="local",
             )
         )
-        return construct_redirect_uri(
-            str(params.redirect_uri), code=code, state=params.state
-        )
+        return construct_redirect_uri(str(params.redirect_uri), code=code, state=params.state)
 
     async def load_authorization_code(
         self, client: OAuthClientInformationFull, authorization_code: str
@@ -494,9 +493,7 @@ class MCPFileRAGAuthProvider(
     async def load_access_token(self, token: str) -> AccessToken | None:
         return verify_jwt_access_token(self.settings, token)
 
-    async def revoke_token(
-        self, token: AccessToken | RefreshToken
-    ) -> None:
+    async def revoke_token(self, token: AccessToken | RefreshToken) -> None:
         if isinstance(token, RefreshToken):
             self.store.revoke_refresh(token.token)
 
@@ -570,9 +567,7 @@ class MCPFileRAGAuthProvider(
             "client_id": client.client_id,
             "scope": " ".join(scopes),
         }
-        return jwt.encode(
-            payload, self.settings.oauth_secret, algorithm="HS256"
-        )
+        return jwt.encode(payload, self.settings.oauth_secret, algorithm="HS256")
 
 
 def verify_jwt_access_token(settings: Settings, token: str) -> AccessToken | None:

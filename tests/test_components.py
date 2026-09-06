@@ -4,13 +4,13 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 import pytest
-from pydantic import AnyUrl
-from mcp.shared.auth import OAuthClientInformationFull
 from mcp.server.auth.provider import AuthorizationParams
+from mcp.shared.auth import OAuthClientInformationFull
+from pydantic import AnyUrl
 
 from filesystem_rag_mcp.config import Settings
-from filesystem_rag_mcp.indexing import Chunk, FileMeta, chunk_file
 from filesystem_rag_mcp.fulltext import FullTextStore
+from filesystem_rag_mcp.indexing import Chunk, FileMeta, chunk_file
 from filesystem_rag_mcp.oauth import (
     MCPFileRAGAuthProvider,
     _b64url,

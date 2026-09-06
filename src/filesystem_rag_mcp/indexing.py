@@ -20,6 +20,7 @@ from pathlib import Path
 from .config import Settings
 from .converter import convert_file_to_markdown
 from .security import is_indexable_file, safe_resolve
+from .semantic_chunker import semantic_chunk_text
 
 
 @dataclass(slots=True, frozen=True)
@@ -82,9 +83,7 @@ def discover_files(settings: Settings) -> list[FileMeta]:
             continue
         if st.st_size > settings.max_file_bytes:
             continue
-        if not is_indexable_file(
-            resolved, allow_binary=settings.index_binary_files
-        ):
+        if not is_indexable_file(resolved, allow_binary=settings.index_binary_files):
             continue
         try:
             with resolved.open("rb") as fh:
@@ -103,9 +102,7 @@ def discover_files(settings: Settings) -> list[FileMeta]:
     return out
 
 
-def chunk_text(
-    text: str, *, chunk_size: int, overlap: int
-) -> list[tuple[int, int, str]]:
+def chunk_text(text: str, *, chunk_size: int, overlap: int) -> list[tuple[int, int, str]]:
     """Split `text` into overlapping chunks.
 
     Returns `(char_start, char_end, body)` triples. `char_start` is the
@@ -176,9 +173,6 @@ def _split_paragraphs(text: str) -> list[str]:
     if buf:
         out.append("\n".join(buf))
     return out
-
-
-from .semantic_chunker import semantic_chunk_text
 
 
 def chunk_file(file_meta: FileMeta, settings: Settings) -> list[Chunk]:

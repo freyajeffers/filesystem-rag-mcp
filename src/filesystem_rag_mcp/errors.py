@@ -10,7 +10,7 @@ force agents to guess what happened. This module standardizes errors with:
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from typing import Any
 
 
@@ -96,7 +96,9 @@ def search_error(query: str, mode: str, reason: str) -> dict[str, Any]:
     ).to_dict()
 
 
-def invalid_parameter_error(param: str, value: Any, constraint: str, suggested_fix: str) -> dict[str, Any]:
+def invalid_parameter_error(
+    param: str, value: Any, constraint: str, suggested_fix: str
+) -> dict[str, Any]:
     return AgentError(
         code="INVALID_PARAMETER",
         message=f"Invalid value {value!r} for parameter '{param}': {constraint}.",

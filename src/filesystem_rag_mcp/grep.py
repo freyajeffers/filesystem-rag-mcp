@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import fnmatch
-from pathlib import Path, PurePath
 import re
+from pathlib import Path, PurePath
 from typing import Any
 
 from .errors import invalid_parameter_error

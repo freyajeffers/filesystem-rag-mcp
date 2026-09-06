@@ -12,29 +12,16 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import contextlib
 import json
-import mimetypes
 from pathlib import Path
 from typing import Any
 
-from mcp.server.mcpserver import MCPServer
 from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions
+from mcp.server.mcpserver import MCPServer
 from mcp.types import ToolAnnotations
 
 from .config import Settings
-from .fulltext import FullTextStore
-from .indexing import Chunk, chunk_file, discover_files
-from .logging_setup import get_logger
-from .search import SearchEngine, SearchHit
-from .fetcher import fetch_csv_data, fetch_json_data, fetch_lines, fetch_sqlite_query
-from .tree import list_directory
-from .grep import grep_search
-from .graph import CorpusGraphBuilder
-from .git_ops import git_search
-from .orchestrator import ContextOrchestrator
-from .query_cache import QueryCache
-from .symbols import search_symbols
-from .watcher import DirectoryWatcher
 from .converter import convert_file_to_markdown
 from .detector import detect_file_type
 from .errors import (
@@ -47,8 +34,21 @@ from .errors import (
     path_traversal_error,
     search_error,
 )
+from .fetcher import fetch_csv_data, fetch_json_data, fetch_lines, fetch_sqlite_query
+from .fulltext import FullTextStore
+from .git_ops import git_search
+from .graph import CorpusGraphBuilder
+from .grep import grep_search
+from .indexing import Chunk, chunk_file, discover_files
+from .logging_setup import get_logger
+from .orchestrator import ContextOrchestrator
+from .query_cache import QueryCache
+from .search import SearchEngine, SearchHit
 from .security import PathSecurityError, safe_resolve
+from .symbols import search_symbols
+from .tree import list_directory
 from .vector import Embedder, VectorStore
+from .watcher import DirectoryWatcher
 
 log = get_logger(__name__)
 
@@ -109,6 +109,7 @@ def build_server(settings: Settings, *, auth_provider: Any | None = None) -> MCP
     state.start_background_indexing()
 
     import atexit
+
     atexit.register(state.stop)
 
     @server.tool(
@@ -601,7 +602,9 @@ class _ServerState:
     async def ensure_indexed_synchronously(self, require_thorough: bool = False) -> None:
         """Ensures indexing is completed synchronously before proceeding with complex tools."""
         target_ready = self._thorough_index_ready if require_thorough else self._quick_index_ready
-        target_task = self._background_thorough_task if require_thorough else self._background_quick_task
+        target_task = (
+            self._background_thorough_task if require_thorough else self._background_quick_task
+        )
 
         if target_task and not target_task.done():
             log.info("awaiting_indexing_for_tool", require_thorough=require_thorough)
@@ -609,7 +612,9 @@ class _ServerState:
         elif not target_ready.is_set():
             async with self._index_lock:
                 if not target_ready.is_set():
-                    await self._refresh_index_internal(full_rebuild=False, vector_index=require_thorough)
+                    await self._refresh_index_internal(
+                        full_rebuild=False, vector_index=require_thorough
+                    )
                     target_ready.set()
 
     # ---- lazy initialization ------------------------------------------
@@ -667,9 +672,9 @@ class _ServerState:
             # Do NOT block if wait_for_indexing is False: use what is currently available
             quick_ready = self._quick_index_ready.is_set()
             thorough_ready = self._thorough_index_ready.is_set()
-            is_indexing = (self._background_quick_task and not self._background_quick_task.done()) or (
-                self._background_thorough_task and not self._background_thorough_task.done()
-            )
+            is_indexing = (
+                self._background_quick_task and not self._background_quick_task.done()
+            ) or (self._background_thorough_task and not self._background_thorough_task.done())
 
             self._ensure()
             assert self._engine is not None
@@ -823,11 +828,12 @@ class _ServerState:
         assert self._engine is not None
         for hit in self._engine.ft.search(f"chunk_id:{chunk_id}", top_k=1):
             if hit.chunk_id == chunk_id:
-                return _hit_to_dict_full(hit.chunk_id, hit.rel_path, hit.file_path,
-                                          hit.start, hit.end, hit.text)
+                return _hit_to_dict_full(
+                    hit.chunk_id, hit.rel_path, hit.file_path, hit.start, hit.end, hit.text
+                )
         # Fallback: vector store via document lookup
         assert self._vec is not None
-        result = self._vec._collection.get(ids=[chunk_id], include=["documents", "metadatas"])  # noqa: SLF001
+        result = self._vec._collection.get(ids=[chunk_id], include=["documents", "metadatas"])
         if result["ids"]:
             meta = result["metadatas"][0] or {}
             return {
@@ -840,9 +846,7 @@ class _ServerState:
             }
         return chunk_not_found_error(chunk_id)
 
-    async def read_file(
-        self, *, rel_path: str, max_bytes: int | None
-    ) -> dict[str, Any]:
+    async def read_file(self, *, rel_path: str, max_bytes: int | None) -> dict[str, Any]:
         root = self.settings.root_dir.resolve()
         try:
             resolved = safe_resolve(root, rel_path)
@@ -898,9 +902,7 @@ class _ServerState:
             type_info = detect_file_type(resolved)
             return conversion_error(rel_path, type_info.label, str(exc))
 
-    async def download_file_raw(
-        self, *, rel_path: str, max_bytes: int | None
-    ) -> dict[str, Any]:
+    async def download_file_raw(self, *, rel_path: str, max_bytes: int | None) -> dict[str, Any]:
         """Download raw file as base64 with MIME type."""
         root = self.settings.root_dir.resolve()
         try:
@@ -949,7 +951,10 @@ class _ServerState:
     ) -> dict[str, Any]:
         if not 0 <= max_depth <= 10:
             return invalid_parameter_error(
-                "max_depth", max_depth, "max_depth must be between 0 and 10", "Use a depth from 0 to 10."
+                "max_depth",
+                max_depth,
+                "max_depth must be between 0 and 10",
+                "Use a depth from 0 to 10.",
             )
         if not 1 <= limit <= 1000:
             return invalid_parameter_error(
@@ -1076,7 +1081,7 @@ class _ServerState:
         return {
             "success": True,
             "count": len(results),
-            "files": {path: res for path, res in results},
+            "files": dict(results),
         }
 
     async def refresh_file(self, *, rel_path: str) -> dict[str, Any]:
@@ -1091,11 +1096,11 @@ class _ServerState:
         if not resolved.is_file():
             return not_a_file_error(rel_path)
 
+        import hashlib
+
+        from .detector import detect_file_type
         from .indexing import FileMeta, chunk_file
         from .security import is_indexable_file
-        from .detector import detect_file_type
-        import hashlib
-        import os
 
         if not is_indexable_file(resolved, allow_binary=self.settings.index_binary_files):
             return {
@@ -1150,7 +1155,6 @@ class _ServerState:
             return center
 
         rel_path = center["rel_path"]
-        center_start = center.get("start", 0)
 
         # Retrieve all chunks for this relative path
         self._ensure()
@@ -1184,7 +1188,7 @@ class _ServerState:
         ]
         after = [
             _hit_to_dict_full(c.chunk_id, c.rel_path, c.file_path, c.start, c.end, c.text)
-            for c in file_chunks[center_idx + 1:end_a]
+            for c in file_chunks[center_idx + 1 : end_a]
         ]
 
         return {
@@ -1274,6 +1278,7 @@ class _ServerState:
         ws_root = self._workspaces.get(workspace)
         if not ws_root:
             from .errors import invalid_parameter_error
+
             return invalid_parameter_error(
                 "workspace",
                 workspace,
@@ -1293,6 +1298,7 @@ class _ServerState:
         p = Path(path).resolve()
         if not p.exists() or not p.is_dir():
             from .errors import path_traversal_error
+
             return path_traversal_error(
                 path,
                 "Workspace path does not exist or is not a directory.",
@@ -1301,7 +1307,10 @@ class _ServerState:
         clean_name = name.strip()
         if not clean_name:
             from .errors import invalid_parameter_error
-            return invalid_parameter_error("name", name, "Workspace name cannot be empty.", "Provide a valid name.")
+
+            return invalid_parameter_error(
+                "name", name, "Workspace name cannot be empty.", "Provide a valid name."
+            )
         async with self._workspaces_lock:
             self._workspaces[clean_name] = p
             all_ws = list(self._workspaces.keys())
@@ -1321,18 +1330,20 @@ class _ServerState:
             },
         }
 
-    async def get_indexing_status(self, wait: bool = False, timeout_seconds: float = 30.0) -> dict[str, Any]:
+    async def get_indexing_status(
+        self, wait: bool = False, timeout_seconds: float = 30.0
+    ) -> dict[str, Any]:
         """Check live background indexing state, with optional caller wait."""
         if wait:
-            try:
+            with contextlib.suppress(asyncio.TimeoutError):
                 await asyncio.wait_for(self._thorough_index_ready.wait(), timeout=timeout_seconds)
-            except asyncio.TimeoutError:
-                pass
 
         quick_ready = self._quick_index_ready.is_set()
         thorough_ready = self._thorough_index_ready.is_set()
         quick_running = bool(self._background_quick_task and not self._background_quick_task.done())
-        thorough_running = bool(self._background_thorough_task and not self._background_thorough_task.done())
+        thorough_running = bool(
+            self._background_thorough_task and not self._background_thorough_task.done()
+        )
 
         text_count = vector_count = 0
         try:
@@ -1366,7 +1377,7 @@ class _ServerState:
             assert self._ft is not None and self._vec is not None
             text_count = self._ft.count()
             vector_count = self._vec.count()
-        except Exception:  # noqa: BLE001 - status should never crash
+        except Exception:
             pass
         return {
             "root": str(self.settings.root_dir),
@@ -1477,4 +1488,4 @@ def _now() -> float:
 # ---------------------------------------------------------------------------
 
 
-__all__ = ["build_server", "Chunk"]
+__all__ = ["Chunk", "build_server"]

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import ast
 import fnmatch
-from pathlib import Path, PurePath
 import re
+from pathlib import Path, PurePath
 from typing import Any
 
 from .errors import invalid_parameter_error
@@ -88,7 +88,6 @@ def search_symbols(
 
             for node in ast.walk(tree):
                 if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                    stype = "function"
                     # Check if it's a method inside a class
                     # Heuristic: inspect line or context, or treat top-level vs nested
                     sym_name = node.name

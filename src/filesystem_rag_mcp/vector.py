@@ -11,14 +11,14 @@ we never mix vectors from different models in the same collection.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable
 
 from .config import Settings
+from .indexing import Chunk
 from .logging_setup import get_logger
 
 log = get_logger("vector")
-from .indexing import Chunk
 
 
 @dataclass(slots=True, frozen=True)
@@ -42,11 +42,13 @@ class Embedder:
 
         if settings.offline_mode:
             import os
+
             os.environ["HF_HUB_OFFLINE"] = "1"
             os.environ["TRANSFORMERS_OFFLINE"] = "1"
 
         try:
             from sentence_transformers import SentenceTransformer
+
             self._model = SentenceTransformer(
                 settings.embedding_model,
                 local_files_only=settings.offline_mode,
@@ -67,9 +69,7 @@ class Embedder:
         if not texts or self._model is None:
             return [[0.0] * self.settings.embedding_dim for _ in texts]
         # normalize_embeddings=True -> cosine sim via inner product
-        vectors = self._model.encode(
-            texts, normalize_embeddings=True, convert_to_numpy=True
-        )
+        vectors = self._model.encode(texts, normalize_embeddings=True, convert_to_numpy=True)
         return vectors.tolist()
 
 

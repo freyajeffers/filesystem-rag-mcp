@@ -1,13 +1,10 @@
 from pathlib import Path
-import pytest
 
 from filesystem_rag_mcp.config import Settings
-from filesystem_rag_mcp.server import build_server
-from filesystem_rag_mcp.indexing import discover_files, chunk_file
-from filesystem_rag_mcp.vector import VectorStore, Embedder
 from filesystem_rag_mcp.fulltext import FullTextStore
-from filesystem_rag_mcp.search import SearchEngine
+from filesystem_rag_mcp.indexing import chunk_file, discover_files
 from filesystem_rag_mcp.oauth import MCPFileRAGAuthProvider
+from filesystem_rag_mcp.server import build_server
 
 
 def test_server_creation_stdio(tmp_path: Path):
@@ -42,9 +39,7 @@ def test_fulltext_search_engine(tmp_path: Path):
     )
     f2 = docs / "code.py"
     f2.write_text(
-        "def compute_attention(q, k, v):\n"
-        "    scores = q @ k.T\n"
-        "    return softmax(scores) @ v\n"
+        "def compute_attention(q, k, v):\n    scores = q @ k.T\n    return softmax(scores) @ v\n"
     )
 
     settings = Settings(

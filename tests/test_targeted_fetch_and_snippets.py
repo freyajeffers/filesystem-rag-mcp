@@ -1,6 +1,7 @@
 import json
 import sqlite3
 from pathlib import Path
+
 import pytest
 
 from filesystem_rag_mcp.config import Settings
@@ -55,10 +56,7 @@ async def test_targeted_json_fetch(tmp_path: Path):
 async def test_targeted_csv_fetch(tmp_path: Path):
     csv_file = tmp_path / "metrics.csv"
     csv_file.write_text(
-        "timestamp,metric,value\n"
-        "1000,cpu,85.2\n"
-        "1001,ram,64.0\n"
-        "1002,cpu,91.4\n",
+        "timestamp,metric,value\n1000,cpu,85.2\n1001,ram,64.0\n1002,cpu,91.4\n",
         encoding="utf-8",
     )
 

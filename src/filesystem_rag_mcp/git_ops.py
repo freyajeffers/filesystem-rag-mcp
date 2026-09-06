@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import subprocess
+from pathlib import Path
 from typing import Any
 
 from .errors import invalid_parameter_error
@@ -45,7 +45,9 @@ def git_search(
     cmd = ["git", "-C", str(root)]
 
     if mode in ("commits", "recent_changes"):
-        cmd.extend(["log", f"-n{max(1, min(limit, 100))}", "--pretty=format:%H|%an|%ad|%s", "--date=short"])
+        cmd.extend(
+            ["log", f"-n{max(1, min(limit, 100))}", "--pretty=format:%H|%an|%ad|%s", "--date=short"]
+        )
         if query:
             cmd.extend(["--grep", query])
         if resolved_path:
@@ -55,8 +57,8 @@ def git_search(
             res = subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=10)
             lines = [line.strip() for line in res.stdout.splitlines() if line.strip()]
             entries = []
-            for l in lines:
-                parts = l.split("|", 3)
+            for entry_line in lines:
+                parts = entry_line.split("|", 3)
                 if len(parts) == 4:
                     entries.append(
                         {
@@ -77,7 +79,11 @@ def git_search(
 
     elif mode == "diff":
         # Show commit diff or working tree diff
-        commit_target = query if query and len(query) in (7, 8, 40) and not query.startswith("-") else "HEAD~1..HEAD"
+        commit_target = (
+            query
+            if query and len(query) in (7, 8, 40) and not query.startswith("-")
+            else "HEAD~1..HEAD"
+        )
         cmd.extend(["diff", commit_target])
         if resolved_path:
             cmd.extend(["--", str(resolved_path.relative_to(root))])

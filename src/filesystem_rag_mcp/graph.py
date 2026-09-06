@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import re
 from collections import defaultdict
 from pathlib import Path
-import re
 from typing import Any
 
 from .security import is_indexable_file, safe_resolve
@@ -14,9 +14,13 @@ class CorpusGraphBuilder:
     """Extracts internal imports and Markdown links to construct a topology graph."""
 
     # Python import patterns
-    PY_IMPORT_RE = re.compile(r"^(?:from\s+([a-zA-Z0-9_\.]+)\s+import|import\s+([a-zA-Z0-9_\.,\s]+))", re.MULTILINE)
+    PY_IMPORT_RE = re.compile(
+        r"^(?:from\s+([a-zA-Z0-9_\.]+)\s+import|import\s+([a-zA-Z0-9_\.,\s]+))", re.MULTILINE
+    )
     # JS/TS import patterns
-    JS_IMPORT_RE = re.compile(r"""(?:import\s+.*?from\s+['"]([^'"]+)['"]|require\s*\(\s*['"]([^'"]+)['"]\))""")
+    JS_IMPORT_RE = re.compile(
+        r"""(?:import\s+.*?from\s+['"]([^'"]+)['"]|require\s*\(\s*['"]([^'"]+)['"]\))"""
+    )
     # Markdown link pattern [title](relative_path.md)
     MD_LINK_RE = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
 
@@ -74,11 +78,21 @@ class CorpusGraphBuilder:
                 # Parse JS/TS imports
                 for match in self.JS_IMPORT_RE.finditer(content):
                     import_path = match.group(1) or match.group(2)
-                    if import_path and (import_path.startswith("./") or import_path.startswith("../")):
+                    if import_path and (
+                        import_path.startswith("./") or import_path.startswith("../")
+                    ):
                         resolved_target = (path.parent / import_path).resolve()
                         try:
                             t_rel = str(resolved_target.relative_to(self.root))
-                            for c_ext in ("", ".ts", ".tsx", ".js", ".jsx", "/index.ts", "/index.js"):
+                            for c_ext in (
+                                "",
+                                ".ts",
+                                ".tsx",
+                                ".js",
+                                ".jsx",
+                                "/index.ts",
+                                "/index.js",
+                            ):
                                 if f"{t_rel}{c_ext}" in rel_paths_set:
                                     targets.add(f"{t_rel}{c_ext}")
                                     break
@@ -107,7 +121,11 @@ class CorpusGraphBuilder:
 
         # Architectural hubs: highest in-degree (most imported/linked files)
         hubs = sorted(
-            [{"file": f, "imported_by_count": in_degree[f]} for f in rel_paths_set if in_degree[f] > 0],
+            [
+                {"file": f, "imported_by_count": in_degree[f]}
+                for f in rel_paths_set
+                if in_degree[f] > 0
+            ],
             key=lambda x: x["imported_by_count"],
             reverse=True,
         )

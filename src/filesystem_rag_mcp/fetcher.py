@@ -29,7 +29,17 @@ def fetch_sqlite_query(
     """Execute a read-only query on a local SQLite database."""
     # Ensure read-only
     normalized = sql.strip().lower()
-    dangerous_keywords = ("insert", "update", "delete", "drop", "alter", "create", "vacuum", "attach", "detach")
+    dangerous_keywords = (
+        "insert",
+        "update",
+        "delete",
+        "drop",
+        "alter",
+        "create",
+        "vacuum",
+        "attach",
+        "detach",
+    )
     if any(normalized.startswith(kw) or f" {kw} " in normalized for kw in dangerous_keywords):
         return {
             "success": False,
@@ -105,10 +115,7 @@ def fetch_json_data(
         else:
             parsed_data = json.loads(content)
 
-        if path_expr:
-            extracted = _resolve_json_path(parsed_data, path_expr)
-        else:
-            extracted = parsed_data
+        extracted = _resolve_json_path(parsed_data, path_expr) if path_expr else parsed_data
 
         # Limit large list responses
         if isinstance(extracted, list) and len(extracted) > max_items:
@@ -138,7 +145,7 @@ def fetch_csv_data(
     """Targeted slicing and column/value filtering of CSV and TSV files."""
     try:
         delimiter = "\t" if path.suffix.lower() == ".tsv" else ","
-        with open(path, "r", encoding="utf-8", errors="replace") as f:
+        with open(path, encoding="utf-8", errors="replace") as f:
             reader = csv.reader(f, delimiter=delimiter)
             all_rows = list(reader)
 
@@ -164,7 +171,9 @@ def fetch_csv_data(
         if filter_col and filter_value is not None and filter_col in headers:
             filt_idx = headers.index(filter_col)
             filter_str = str(filter_value).lower()
-            data_rows = [r for r in data_rows if filt_idx < len(r) and filter_str in r[filt_idx].lower()]
+            data_rows = [
+                r for r in data_rows if filt_idx < len(r) and filter_str in r[filt_idx].lower()
+            ]
 
         total_matching = len(data_rows)
         sliced_rows = data_rows[row_offset : row_offset + row_limit]

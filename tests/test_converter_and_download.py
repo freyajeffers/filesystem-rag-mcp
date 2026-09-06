@@ -1,12 +1,12 @@
 import base64
 import json
 from pathlib import Path
+
 import pytest
-import pymupdf
 
 from filesystem_rag_mcp.config import Settings
-from filesystem_rag_mcp.server import build_server
 from filesystem_rag_mcp.converter import convert_file_to_markdown
+from filesystem_rag_mcp.server import build_server
 
 
 def test_converter_markdown_formats(tmp_path: Path):
@@ -27,7 +27,9 @@ def test_converter_markdown_formats(tmp_path: Path):
 
     # 3. HTML
     html_path = tmp_path / "doc.html"
-    html_path.write_text("<html><head><title>Test Doc</title></head><body><h1>Heading</h1><p>Paragraph text</p></body></html>")
+    html_path.write_text(
+        "<html><head><title>Test Doc</title></head><body><h1>Heading</h1><p>Paragraph text</p></body></html>"
+    )
     md_html = convert_file_to_markdown(html_path)
     assert "Test Doc" in md_html
     assert "Paragraph text" in md_html
@@ -40,19 +42,19 @@ def test_converter_ipynb(tmp_path: Path):
             {
                 "cell_type": "markdown",
                 "metadata": {},
-                "source": ["# Analysis Notebook\n", "Explaining results."]
+                "source": ["# Analysis Notebook\n", "Explaining results."],
             },
             {
                 "cell_type": "code",
                 "execution_count": 1,
                 "metadata": {},
                 "outputs": [{"output_type": "stream", "name": "stdout", "text": ["42\n"]}],
-                "source": ["x = 42\n", "print(x)"]
-            }
+                "source": ["x = 42\n", "print(x)"],
+            },
         ],
         "metadata": {},
         "nbformat": 4,
-        "nbformat_minor": 2
+        "nbformat_minor": 2,
     }
     nb_path.write_text(json.dumps(nb_content))
     md_nb = convert_file_to_markdown(nb_path)
@@ -93,10 +95,11 @@ async def test_server_tools_markdown_and_download(tmp_path: Path):
     (root / "binary.bin").write_bytes(b"\x00\x01\x02\x03\x04\xff")
 
     settings = Settings(root_dir=root, data_dir=tmp_path / "data")
-    server = build_server(settings)
+    _server = build_server(settings)
 
     # Directly verify state methods
     from filesystem_rag_mcp.server import _ServerState
+
     state = _ServerState(settings)
 
     # 1. read_file_markdown

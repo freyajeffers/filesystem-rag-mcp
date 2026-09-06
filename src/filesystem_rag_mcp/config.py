@@ -149,7 +149,7 @@ class Settings(BaseModel):
         return Path(os.path.expanduser(str(v))).resolve()
 
     @classmethod
-    def from_env(cls, env: dict[str, str] | None = None) -> "Settings":
+    def from_env(cls, env: dict[str, str] | None = None) -> Settings:
         """Build a Settings instance from `FS_RAG_*` environment variables.
 
         Only variables that are actually set are honored; everything else
@@ -176,23 +176,38 @@ def _coerce(short: str, raw: str) -> object:
     if short == "TRANSPORT":
         return raw.strip().lower()
     if short in {
-        "HTTP_HOST", "HTTP_PATH", "ROOT_DIR", "DATA_DIR",
-        "EMBEDDING_MODEL", "OAUTH_ISSUER", "OAUTH_SECRET", "LOG_LEVEL",
+        "HTTP_HOST",
+        "HTTP_PATH",
+        "ROOT_DIR",
+        "DATA_DIR",
+        "EMBEDDING_MODEL",
+        "OAUTH_ISSUER",
+        "OAUTH_SECRET",
+        "LOG_LEVEL",
     }:
         return raw
     if short in {
-        "HTTP_PORT", "CHUNK_SIZE", "CHUNK_OVERLAP", "MAX_FILE_BYTES",
-        "EMBEDDING_DIM", "DEFAULT_TOP_K",
-        "OAUTH_ACCESS_TOKEN_TTL_SECONDS", "OAUTH_REFRESH_TOKEN_TTL_SECONDS",
+        "HTTP_PORT",
+        "CHUNK_SIZE",
+        "CHUNK_OVERLAP",
+        "MAX_FILE_BYTES",
+        "EMBEDDING_DIM",
+        "DEFAULT_TOP_K",
+        "OAUTH_ACCESS_TOKEN_TTL_SECONDS",
+        "OAUTH_REFRESH_TOKEN_TTL_SECONDS",
         "MAX_CONVERT_FILE_BYTES",
     }:
         return int(raw)
     if short == "HYBRID_ALPHA":
         return float(raw)
     if short in {
-        "FOLLOW_SYMLINKS", "OAUTH_REQUIRE_PKCE",
-        "OAUTH_ALLOW_DYNAMIC_REGISTRATION", "AUTH_REQUIRED",
-        "OFFLINE_MODE", "INDEX_BINARY_FILES", "INDEX_BINARY_VECTORS",
+        "FOLLOW_SYMLINKS",
+        "OAUTH_REQUIRE_PKCE",
+        "OAUTH_ALLOW_DYNAMIC_REGISTRATION",
+        "AUTH_REQUIRED",
+        "OFFLINE_MODE",
+        "INDEX_BINARY_FILES",
+        "INDEX_BINARY_VECTORS",
     }:
         return raw.strip().lower() in {"1", "true", "yes", "on"}
     if short == "IGNORE_GLOBS":

@@ -3,7 +3,6 @@ from pathlib import Path
 import pytest
 
 from filesystem_rag_mcp.config import Settings
-from filesystem_rag_mcp.indexing import FileMeta, chunk_file
 from filesystem_rag_mcp.semantic_chunker import semantic_chunk_text
 from filesystem_rag_mcp.server import _ServerState
 
@@ -30,8 +29,12 @@ async def test_path_glob_filtered_search_and_directory_listing(tmp_path: Path):
     docs = tmp_path / "docs"
     src.mkdir()
     docs.mkdir()
-    (src / "app.py").write_text("def unique_component():\n    return 'glob-search-token'\n", encoding="utf-8")
-    (docs / "guide.md").write_text("# Guide\n\nglob-search-token appears in documentation.\n", encoding="utf-8")
+    (src / "app.py").write_text(
+        "def unique_component():\n    return 'glob-search-token'\n", encoding="utf-8"
+    )
+    (docs / "guide.md").write_text(
+        "# Guide\n\nglob-search-token appears in documentation.\n", encoding="utf-8"
+    )
 
     state = _ServerState(Settings(root_dir=tmp_path, data_dir=tmp_path / ".fsrag"))
     await state.refresh_index(full_rebuild=True)

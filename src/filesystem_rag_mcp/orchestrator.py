@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from typing import Any
 
 from .search import SearchEngine, SearchHit
@@ -142,6 +141,8 @@ class ContextOrchestrator:
             "estimated_tokens": len(markdown_bundle) // 4,
             "max_tokens": max_tokens,
             "chunks_included": len(used_chunks),
-            "unique_files_included": len({h.rel_path for h in hits if h.chunk_id in set(used_chunks)}),
+            "unique_files_included": len(
+                {h.rel_path for h in hits if h.chunk_id in set(used_chunks)}
+            ),
             "markdown": markdown_bundle,
         }

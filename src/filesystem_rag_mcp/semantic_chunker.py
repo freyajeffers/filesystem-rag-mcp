@@ -9,7 +9,6 @@ Instead of blind character-count slicing, this module splits text along semantic
 from __future__ import annotations
 
 import re
-from typing import Iterator
 
 
 def semantic_chunk_text(
@@ -45,7 +44,7 @@ def semantic_chunk_text(
         cur_parts: list[str] = []
         cur_len = 0
 
-        for s_start, s_end, s_text in sections:
+        for s_start, _s_end, s_text in sections:
             if cur_len + len(s_text) > chunk_size and cur_parts:
                 joined = "\n\n".join(cur_parts).strip()
                 chunks.append((cur_start, s_start, joined))

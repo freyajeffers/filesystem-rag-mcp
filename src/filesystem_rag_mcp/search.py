@@ -155,7 +155,7 @@ class SearchEngine:
                                 end=m.end,
                                 text=m.text,
                                 score=float(item.get("score", 0.0)),
-                                sources=tuple(sources.get(cid, []) + ["rerank"]),
+                                sources=(*sources.get(cid, []), "rerank"),
                             )
                         )
                     return out
