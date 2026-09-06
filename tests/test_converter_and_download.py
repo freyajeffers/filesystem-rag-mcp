@@ -2,6 +2,7 @@ import base64
 import json
 from pathlib import Path
 import pytest
+import pymupdf
 
 from filesystem_rag_mcp.config import Settings
 from filesystem_rag_mcp.server import build_server
@@ -74,6 +75,14 @@ def test_converter_docx(tmp_path: Path):
 
     md_docx = convert_file_to_markdown(docx_path)
     assert "This is a paragraph inside a Word doc." in md_docx
+
+
+def test_converter_epub(tmp_path: Path):
+    epub_path = Path("/tmp/sample.epub")
+    if epub_path.exists():
+        md_epub = convert_file_to_markdown(epub_path)
+        assert "Intro Chapter" in md_epub
+        assert "This is the intro text in an EPUB book." in md_epub
 
 
 @pytest.mark.asyncio

@@ -18,6 +18,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from filesystem_rag_mcp.detector import detect_file_type
 from filesystem_rag_mcp.logging_setup import get_logger
 
 log = get_logger("converter")
@@ -189,37 +190,58 @@ def _convert_html(path: Path) -> str:
     return f"# {title}\n\n{cleaned}"
 
 
+def _convert_epub(path: Path) -> str:
+    import pymupdf
+
+    doc = pymupdf.open(str(path))
+    pages_text: list[str] = [f"# {path.name}\n"]
+    for i in range(len(doc)):
+        page = doc[i]
+        text = str(page.get_text()).strip()
+        if text:
+            pages_text.append(f"\n{text}\n")
+    doc.close()
+    return "\n".join(pages_text)
+
+
 def convert_file_to_markdown(path: Path) -> str:
     """Convert any supported file type to clean Markdown text.
 
-    Uses MarkItDown first where appropriate, with specialized fallbacks for
-    IPYNB, CSV, RTF, PDF, DOCX, PPTX, XLSX, HTML, JSON, YAML, etc.
+    Inspects raw file content to identify true file type (via Magika and
+    magic bytes) rather than relying solely on file extensions.
     """
+    type_info = detect_file_type(path)
+    label = type_info.label
     ext = path.suffix.lower()
 
-    # Specialized handlers
-    if ext == ".ipynb":
+    # Specialized handlers based on true content-type (or extension fallback)
+    if label == "ipynb" or ext == ".ipynb":
         return _convert_ipynb(path)
-    if ext in (".csv", ".tsv"):
+    if label in ("csv", "tsv") or ext in (".csv", ".tsv"):
         return _convert_csv(path)
-    if ext == ".rtf":
+    if label == "rtf" or ext == ".rtf":
         return _convert_rtf(path)
-    if ext in (".html", ".htm"):
+    if label in ("html", "htm") or ext in (".html", ".htm"):
         return _convert_html(path)
+    if label == "epub" or ext == ".epub":
+        return _convert_epub(path)
 
     # Try MarkItDown for rich office/document formats
     md_converter = _get_markitdown()
-    if md_converter and ext in (
-        ".pdf",
-        ".docx",
-        ".pptx",
-        ".xlsx",
-        ".xls",
-        ".html",
-        ".htm",
-        ".xml",
-        ".epub",
-        ".zip",
+    if md_converter and (
+        label in ("pdf", "docx", "pptx", "xlsx", "xls", "epub", "html", "htm", "xml")
+        or ext in (
+            ".pdf",
+            ".docx",
+            ".pptx",
+            ".xlsx",
+            ".xls",
+            ".html",
+            ".htm",
+            ".xml",
+            ".epub",
+            ".zip",
+        )
     ):
         try:
             result = md_converter.convert(str(path))
@@ -229,17 +251,17 @@ def convert_file_to_markdown(path: Path) -> str:
             log.warning("markitdown_conversion_failed", path=str(path), error=str(e))
 
     # Fallback to direct handlers
-    if ext == ".pdf":
+    if label == "pdf" or ext == ".pdf":
         return _convert_pdf_fallback(path)
-    if ext == ".docx":
+    if label == "docx" or ext == ".docx":
         return _convert_docx_fallback(path)
-    if ext == ".pptx":
+    if label == "pptx" or ext == ".pptx":
         return _convert_pptx_fallback(path)
-    if ext in (".xlsx", ".xls"):
+    if label in ("xlsx", "xls") or ext in (".xlsx", ".xls"):
         return _convert_xlsx_fallback(path)
 
     # Structured data formats -> wrap in markdown fences
-    if ext == ".json":
+    if label in ("json", "jsonl") or ext == ".json":
         raw = path.read_text(encoding="utf-8", errors="replace")
         try:
             formatted = json.dumps(json.loads(raw), indent=2)
@@ -247,23 +269,23 @@ def convert_file_to_markdown(path: Path) -> str:
         except Exception:
             return f"# {path.name}\n\n```json\n{raw}\n```"
 
-    if ext in (".yaml", ".yml"):
+    if label == "yaml" or ext in (".yaml", ".yml"):
         raw = path.read_text(encoding="utf-8", errors="replace")
         return f"# {path.name}\n\n```yaml\n{raw}\n```"
 
-    if ext == ".toml":
+    if label == "toml" or ext == ".toml":
         raw = path.read_text(encoding="utf-8", errors="replace")
         return f"# {path.name}\n\n```toml\n{raw}\n```"
 
-    if ext == ".xml":
+    if label == "xml" or ext == ".xml":
         raw = path.read_text(encoding="utf-8", errors="replace")
         return f"# {path.name}\n\n```xml\n{raw}\n```"
 
-    # Default fallback: Treat as text
+    # Default fallback: Treat as text if text or convertible
     try:
         raw_text = path.read_text(encoding="utf-8", errors="replace")
-        lang = ext.lstrip(".") if ext else "text"
-        if ext in (".md", ".markdown", ".txt"):
+        lang = label if label != "text" else (ext.lstrip(".") if ext else "text")
+        if ext in (".md", ".markdown", ".txt") or label in ("markdown", "txt"):
             return raw_text
         return f"# {path.name}\n\n```{lang}\n{raw_text}\n```"
     except Exception as err:

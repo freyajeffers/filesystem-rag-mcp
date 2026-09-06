@@ -89,12 +89,14 @@ SUPPORTED_CONVERTIBLE_EXTENSIONS: frozenset[str] = frozenset({
 })
 
 
+from .detector import detect_file_type
+
+
 def is_indexable_file(path: Path) -> bool:
-    """Check if file can be indexed (either supported convertible extension or text)."""
-    ext = path.suffix.lower()
-    if ext in SUPPORTED_CONVERTIBLE_EXTENSIONS:
-        return True
-    return is_text_file(path)
+    """Check if file can be indexed using deep content-type detection."""
+    type_info = detect_file_type(path)
+    return type_info.is_convertible or type_info.is_text
+
 
 
 
