@@ -73,7 +73,7 @@ async def test_workspace_management(tmp_path: Path):
     assert "default" in workspaces["workspaces"]
 
     # Add workspace
-    res = state.add_workspace(name="secondary", path=str(ws2))
+    res = await state.add_workspace(name="secondary", path=str(ws2))
     assert res["success"] is True
     assert "secondary" in state.list_workspaces()["workspaces"]
 

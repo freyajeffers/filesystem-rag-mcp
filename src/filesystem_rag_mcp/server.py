@@ -470,7 +470,7 @@ def build_server(settings: Settings, *, auth_provider: Any | None = None) -> MCP
         annotations=ToolAnnotations(readOnlyHint=False),
     )
     async def add_workspace_tool(name: str, path: str) -> dict[str, Any]:
-        return state.add_workspace(name=name, path=path)
+        return await state.add_workspace(name=name, path=path)
 
     @server.tool(
         name="list_workspaces",
@@ -534,6 +534,7 @@ class _ServerState:
         self._workspaces: dict[str, Path] = {
             "default": Path(settings.root_dir).resolve(),
         }
+        self._workspaces_lock = asyncio.Lock()
         self._watcher = DirectoryWatcher(
             Path(settings.root_dir).resolve(),
             self._run_watcher_refresh,
@@ -1288,7 +1289,7 @@ class _ServerState:
             sub_dir=sub_dir,
         )
 
-    def add_workspace(self, *, name: str, path: str) -> dict[str, Any]:
+    async def add_workspace(self, *, name: str, path: str) -> dict[str, Any]:
         p = Path(path).resolve()
         if not p.exists() or not p.is_dir():
             from .errors import path_traversal_error
@@ -1301,12 +1302,14 @@ class _ServerState:
         if not clean_name:
             from .errors import invalid_parameter_error
             return invalid_parameter_error("name", name, "Workspace name cannot be empty.", "Provide a valid name.")
-        self._workspaces[clean_name] = p
+        async with self._workspaces_lock:
+            self._workspaces[clean_name] = p
+            all_ws = list(self._workspaces.keys())
         return {
             "success": True,
             "workspace": clean_name,
             "path": str(p),
-            "all_workspaces": list(self._workspaces.keys()),
+            "all_workspaces": all_ws,
         }
 
     def list_workspaces(self) -> dict[str, Any]:
