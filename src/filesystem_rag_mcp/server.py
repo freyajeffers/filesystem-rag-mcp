@@ -102,6 +102,9 @@ def build_server(settings: Settings, *, auth_provider: Any | None = None) -> MCP
     state = _ServerState(settings)
     state.start_background_indexing()
 
+    import atexit
+    atexit.register(state.stop)
+
     @server.tool(
         name="search",
         description=(
@@ -320,6 +323,16 @@ class _ServerState:
             self._run_watcher_refresh,
         )
 
+    def stop(self) -> None:
+        """Explicitly shut down background tasks and watcher."""
+        if self._watcher:
+            self._watcher.stop()
+        if self._background_quick_task and not self._background_quick_task.done():
+            self._background_quick_task.cancel()
+        if self._background_thorough_task and not self._background_thorough_task.done():
+            self._background_thorough_task.cancel()
+        log.info("server_state_stopped")
+
     def start_background_indexing(self) -> None:
         """Trigger fast quick indexing and thorough deep indexing concurrently on server startup."""
         try:
@@ -511,7 +524,15 @@ class _ServerState:
                 continue
             self._ft.upsert(chunks)
             if vector_index:
-                self._vec.upsert(chunks)
+                # If index_binary_vectors is False, skip non-text fallback binary files in vector store
+                if not self.settings.index_binary_vectors:
+                    type_info = detect_file_type(fm.abs_path)
+                    if not type_info.is_text and not type_info.is_convertible:
+                        pass
+                    else:
+                        self._vec.upsert(chunks)
+                else:
+                    self._vec.upsert(chunks)
             new_chunk_ids.update(c.chunk_id for c in chunks)
             new_rel_paths.add(fm.rel_path)
             indexed_files += 1
@@ -619,7 +640,9 @@ class _ServerState:
         if not resolved.is_file():
             return not_a_file_error(rel_path)
         try:
-            markdown = convert_file_to_markdown(resolved)
+            markdown = convert_file_to_markdown(
+                resolved, max_bytes=self.settings.max_convert_file_bytes
+            )
             return {
                 "rel_path": str(resolved.relative_to(root)),
                 "abs_path": str(resolved),

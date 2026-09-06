@@ -82,7 +82,9 @@ def discover_files(settings: Settings) -> list[FileMeta]:
             continue
         if st.st_size > settings.max_file_bytes:
             continue
-        if not is_indexable_file(resolved):
+        if not is_indexable_file(
+            resolved, allow_binary=settings.index_binary_files
+        ):
             continue
         try:
             with resolved.open("rb") as fh:

@@ -118,6 +118,28 @@ class Settings(BaseModel):
     )
     oauth_allow_dynamic_registration: bool = Field(default=True)
 
+    # ---- operational & performance guards -----------------------------------
+    offline_mode: bool = Field(
+        default=False,
+        description="When True, disable outbound HuggingFace network requests and "
+        "gracefully degrade to full-text search if local embedding weights are not cached.",
+    )
+    max_convert_file_bytes: int = Field(
+        default=50_000_000,
+        ge=10_000,
+        description="Files larger than this limit are truncated or converted via head-slice to prevent OOM.",
+    )
+    index_binary_files: bool = Field(
+        default=False,
+        description="If False, raw binary files that fall back to hexdumps are excluded from "
+        "indexing. When True, they are converted via universal hexdump/string extraction.",
+    )
+    index_binary_vectors: bool = Field(
+        default=False,
+        description="If False, raw binary files that fall back to hexdumps are indexed in "
+        "fulltext search (if index_binary_files=True) but skipped during dense vector embedding.",
+    )
+
     # ---- observability ------------------------------------------------------
     log_level: str = Field(default="INFO")
 
@@ -162,6 +184,7 @@ def _coerce(short: str, raw: str) -> object:
         "HTTP_PORT", "CHUNK_SIZE", "CHUNK_OVERLAP", "MAX_FILE_BYTES",
         "EMBEDDING_DIM", "DEFAULT_TOP_K",
         "OAUTH_ACCESS_TOKEN_TTL_SECONDS", "OAUTH_REFRESH_TOKEN_TTL_SECONDS",
+        "MAX_CONVERT_FILE_BYTES",
     }:
         return int(raw)
     if short == "HYBRID_ALPHA":
@@ -169,6 +192,7 @@ def _coerce(short: str, raw: str) -> object:
     if short in {
         "FOLLOW_SYMLINKS", "OAUTH_REQUIRE_PKCE",
         "OAUTH_ALLOW_DYNAMIC_REGISTRATION", "AUTH_REQUIRED",
+        "OFFLINE_MODE", "INDEX_BINARY_FILES", "INDEX_BINARY_VECTORS",
     }:
         return raw.strip().lower() in {"1", "true", "yes", "on"}
     if short == "IGNORE_GLOBS":

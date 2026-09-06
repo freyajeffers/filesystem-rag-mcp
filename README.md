@@ -110,6 +110,27 @@ filesystem-rag-mcp --transport http --no-auth --host 127.0.0.1 --port 8000 --roo
 - `refresh_index`:
   - Force re-indexing of documents and chunk caching.
 
+### Configuration Generator & Presets
+
+Generate ready-to-paste JSON client configs directly from the CLI:
+
+```bash
+# Print configs for Claude Desktop, Zed, and Hermes
+filesystem-rag-mcp --config-snippet all
+
+# Specific targets:
+filesystem-rag-mcp --config-snippet claude
+filesystem-rag-mcp --config-snippet zed
+filesystem-rag-mcp --config-snippet hermes
+```
+
+### Operational & Performance Guards
+
+- **Offline / Air-Gapped Mode**: Use `--offline` / `FSRAG_OFFLINE_MODE=1` to disable outbound HuggingFace network requests and operate strictly on cached weights.
+- **Large File Protection**: `max_convert_file_bytes` (default: 50MB) prevents OOM crashes on huge files by safely providing leading stream extracts.
+- **Vector Binary Exclusion**: By default, raw binary files falling back to hexdumps are indexed in BM25 full-text search but excluded from dense vector embeddings (`index_binary_vectors=False`) to avoid noise in vector similarity space.
+- **Graceful Shutdown**: Process termination cleanups are registered with `atexit` to flush persistent indexes and release file watcher threads cleanly.
+
 ## Testing
 
 Run tests with `pytest`:

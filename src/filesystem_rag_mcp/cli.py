@@ -77,11 +77,27 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=os.environ.get("FSRAG_LOG_LEVEL", "INFO"),
         help="Logging level",
     )
+    parser.add_argument(
+        "--offline",
+        action="store_true",
+        default=os.environ.get("FSRAG_OFFLINE_MODE", "false").lower() in {"1", "true", "yes"},
+        help="Disable outbound HF network calls; degrade gracefully if weights are missing",
+    )
+    parser.add_argument(
+        "--config-snippet",
+        choices=["claude", "zed", "hermes", "all"],
+        help="Print ready-to-paste MCP client configuration JSON and exit",
+    )
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
+
+    if args.config_snippet:
+        _print_config_snippet(args.config_snippet, args)
+        return
+
     configure_logging(args.log_level)
 
     transport_choice = args.transport
@@ -98,6 +114,7 @@ def main(argv: list[str] | None = None) -> None:
         auth_required=auth_required,
         oauth_allow_dynamic_registration=allow_dcr,
         oauth_issuer=f"http://{args.host}:{args.port}",
+        offline_mode=args.offline,
     )
 
     log.info(
@@ -128,6 +145,73 @@ def main(argv: list[str] | None = None) -> None:
         )
     else:
         sys.exit(f"Unknown transport: {args.transport}")
+
+
+def _print_config_snippet(target: str, args: argparse.Namespace) -> None:
+    import json
+    import sys
+
+    root = str(args.root_dir.resolve())
+    exec_path = sys.executable
+
+    claude_cfg = {
+        "mcpServers": {
+            "filesystem-rag": {
+                "command": exec_path,
+                "args": [
+                    "-m",
+                    "filesystem_rag_mcp.cli",
+                    "--transport",
+                    "stdio",
+                    "--root-dir",
+                    root,
+                ],
+            }
+        }
+    }
+
+    zed_cfg = {
+        "context_servers": [
+            {
+                "id": "filesystem-rag",
+                "executable": exec_path,
+                "args": [
+                    "-m",
+                    "filesystem_rag_mcp.cli",
+                    "--transport",
+                    "stdio",
+                    "--root-dir",
+                    root,
+                ],
+            }
+        ]
+    }
+
+    hermes_cfg = {
+        "mcp_servers": {
+            "filesystem-rag": {
+                "command": exec_path,
+                "args": [
+                    "-m",
+                    "filesystem_rag_mcp.cli",
+                    "--transport",
+                    "stdio",
+                    "--root-dir",
+                    root,
+                ],
+            }
+        }
+    }
+
+    if target in ("claude", "all"):
+        print("\n# --- Claude Desktop (claude_desktop_config.json) ---")
+        print(json.dumps(claude_cfg, indent=2))
+    if target in ("zed", "all"):
+        print("\n# --- Zed Editor (settings.json context_servers) ---")
+        print(json.dumps(zed_cfg, indent=2))
+    if target in ("hermes", "all"):
+        print("\n# --- Hermes / Antigravity Agent Configuration ---")
+        print(json.dumps(hermes_cfg, indent=2))
 
 
 if __name__ == "__main__":

@@ -92,10 +92,12 @@ SUPPORTED_CONVERTIBLE_EXTENSIONS: frozenset[str] = frozenset({
 from .detector import detect_file_type
 
 
-def is_indexable_file(path: Path) -> bool:
+def is_indexable_file(path: Path, allow_binary: bool = False) -> bool:
     """Check if file can be indexed using deep content-type detection."""
     type_info = detect_file_type(path)
-    return type_info.is_convertible or type_info.is_text
+    if type_info.is_convertible or type_info.is_text:
+        return True
+    return allow_binary
 
 
 

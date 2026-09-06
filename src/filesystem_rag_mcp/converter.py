@@ -417,8 +417,29 @@ def _convert_binary_hexdump(path: Path) -> str:
 import hashlib
 
 
-def convert_file_to_markdown(path: Path) -> str:
-    """Universal document and file to Markdown converter."""
+def convert_file_to_markdown(path: Path, max_bytes: int | None = None) -> str:
+    """Universal document and file to Markdown converter with file-size guard."""
+    if not path.is_file():
+        raise FileNotFoundError(f"Path does not exist or is not a regular file: {path}")
+
+    size = path.stat().st_size
+    limit = max_bytes if max_bytes is not None else 50_000_000
+
+    if size > limit:
+        # File exceeds safety limit: extract head-slice to avoid OOM
+        try:
+            with path.open("rb") as f:
+                head = f.read(100_000)
+            sample_ascii = "".join(chr(b) if 32 <= b <= 126 or b in (9, 10, 13) else "." for b in head[:5000])
+            return (
+                f"# {path.name} (Large File Notice)\n\n"
+                f"> **Warning**: File size ({size:,} bytes) exceeds safety conversion limit ({limit:,} bytes).\n"
+                f"> Truncated to avoid Out-Of-Memory exhaustion. Showing leading 5KB stream extract below:\n\n"
+                f"```text\n{sample_ascii}\n```\n"
+            )
+        except Exception as exc:
+            return f"# {path.name}\n\n> File size {size:,} bytes exceeds limit {limit:,}. Read failed: {exc}"
+
     type_info = detect_file_type(path)
     label = type_info.label.lower()
     group = type_info.group.lower()

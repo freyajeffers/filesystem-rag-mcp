@@ -15,6 +15,9 @@ from dataclasses import dataclass
 from typing import Iterable
 
 from .config import Settings
+from .logging_setup import get_logger
+
+log = get_logger("vector")
 from .indexing import Chunk
 
 
@@ -30,18 +33,39 @@ class VectorHit:
 
 
 class Embedder:
-    """Wraps a sentence-transformers model with explicit caching."""
+    """Wraps a sentence-transformers model with explicit caching and offline tolerance."""
 
     def __init__(self, settings: Settings) -> None:
-        from sentence_transformers import SentenceTransformer
-
         self.settings = settings
-        # Trust remote code off; the default model is local-only.
-        self._model = SentenceTransformer(settings.embedding_model)
+        self._model = None
+        self._offline_unavailable = False
+
+        if settings.offline_mode:
+            import os
+            os.environ["HF_HUB_OFFLINE"] = "1"
+            os.environ["TRANSFORMERS_OFFLINE"] = "1"
+
+        try:
+            from sentence_transformers import SentenceTransformer
+            self._model = SentenceTransformer(
+                settings.embedding_model,
+                local_files_only=settings.offline_mode,
+            )
+        except Exception as exc:
+            log.warning(
+                "embedder_init_degraded",
+                model=settings.embedding_model,
+                offline=settings.offline_mode,
+                error=str(exc),
+            )
+            self._offline_unavailable = True
+
+    def is_available(self) -> bool:
+        return self._model is not None and not self._offline_unavailable
 
     def embed(self, texts: list[str]) -> list[list[float]]:
-        if not texts:
-            return []
+        if not texts or self._model is None:
+            return [[0.0] * self.settings.embedding_dim for _ in texts]
         # normalize_embeddings=True -> cosine sim via inner product
         vectors = self._model.encode(
             texts, normalize_embeddings=True, convert_to_numpy=True
@@ -110,7 +134,7 @@ class VectorStore:
         return set(result.get("ids", []))
 
     def search(self, query: str, top_k: int) -> list[VectorHit]:
-        if not query.strip():
+        if not query.strip() or not self.embedder.is_available():
             return []
         emb = self.embedder.embed([query])[0]
         result = self._collection.query(
