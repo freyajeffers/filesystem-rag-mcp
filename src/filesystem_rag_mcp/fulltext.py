@@ -92,9 +92,12 @@ class FullTextStore:
     def all_chunk_ids(self) -> set[str]:
         ids: set[str] = set()
         with self._ix.searcher() as s:
-            for docnum in s.iter_docs():
-                # docnum -> stored fields; first field is the unique chunk_id
-                stored = s.stored_fields(docnum)
+            for item in s.iter_docs():
+                # iter_docs yields (docnum, stored_fields) tuples in modern Whoosh
+                if isinstance(item, tuple):
+                    stored = item[1] if len(item) > 1 and isinstance(item[1], dict) else s.stored_fields(item[0])
+                else:
+                    stored = s.stored_fields(item)
                 cid = stored.get("chunk_id")
                 if cid:
                     ids.add(cid)

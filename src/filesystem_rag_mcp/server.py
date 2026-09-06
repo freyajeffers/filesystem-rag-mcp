@@ -25,6 +25,7 @@ from .fulltext import FullTextStore
 from .indexing import Chunk, chunk_file, discover_files
 from .logging_setup import get_logger
 from .search import SearchEngine, SearchHit
+from .fetcher import fetch_csv_data, fetch_json_data, fetch_lines, fetch_sqlite_query
 from .converter import convert_file_to_markdown
 from .detector import detect_file_type
 from .errors import (
@@ -176,6 +177,39 @@ def build_server(settings: Settings, *, auth_provider: Any | None = None) -> MCP
     ) -> dict[str, Any]:
         return await state.download_file_raw(rel_path=rel_path, max_bytes=max_bytes)
 
+    @server.tool(
+        name="fetch_targeted_data",
+        description=(
+            "Execute targeted data fetching against structured files. Supports:\n"
+            "- SQLite: SQL query via `query` parameter (e.g. 'SELECT * FROM users WHERE role=\"Admin\"')\n"
+            "- JSON/JSONL: path expression via `query` parameter (e.g. 'users[0].email' or 'config.db')\n"
+            "- CSV/TSV: column filtering, row offsets/limits, and value match filters\n"
+            "- Text/Code: line range extraction via `start_line` and `end_line` parameters."
+        ),
+    )
+    async def fetch_targeted_data_tool(
+        rel_path: str,
+        query: str | None = None,
+        columns: list[str] | None = None,
+        row_offset: int = 0,
+        row_limit: int = 50,
+        filter_col: str | None = None,
+        filter_value: str | None = None,
+        start_line: int | None = None,
+        end_line: int | None = None,
+    ) -> dict[str, Any]:
+        return await state.fetch_targeted(
+            rel_path=rel_path,
+            query=query,
+            columns=columns,
+            row_offset=row_offset,
+            row_limit=row_limit,
+            filter_col=filter_col,
+            filter_value=filter_value,
+            start_line=start_line,
+            end_line=end_line,
+        )
+
     # Resources — index status and metadata
     @server.resource(
         name="index_status",
@@ -267,7 +301,7 @@ class _ServerState:
                 "query": query,
                 "top_k": top_k or self.settings.default_top_k,
                 "alpha": alpha if alpha is not None else self.settings.hybrid_alpha,
-                "results": [_hit_to_dict(h) for h in hits],
+                "results": [_hit_to_dict(h, query=query) for h in hits],
             }
         except Exception as exc:
             return search_error(query, "hybrid", str(exc))
@@ -438,6 +472,63 @@ class _ServerState:
             "base64_data": encoded,
         }
 
+    async def fetch_targeted(
+        self,
+        *,
+        rel_path: str,
+        query: str | None = None,
+        columns: list[str] | None = None,
+        row_offset: int = 0,
+        row_limit: int = 50,
+        filter_col: str | None = None,
+        filter_value: str | None = None,
+        start_line: int | None = None,
+        end_line: int | None = None,
+    ) -> dict[str, Any]:
+        root = Path(self.settings.root_dir).resolve()
+        try:
+            resolved = safe_resolve(root, rel_path)
+        except PathSecurityError as exc:
+            return path_traversal_error(rel_path, str(root), str(exc))
+
+        if not resolved.exists():
+            return file_not_found_error(rel_path, str(root))
+        if not resolved.is_file():
+            return not_a_file_error(rel_path)
+
+        type_info = detect_file_type(resolved)
+        label = type_info.label.lower()
+        ext = resolved.suffix.lower()
+
+        # Line-based fetching
+        if start_line is not None or end_line is not None:
+            s_line = start_line if start_line is not None else 1
+            e_line = end_line if end_line is not None else (s_line + 50)
+            return fetch_lines(resolved, s_line, e_line)
+
+        # SQLite
+        if ext in (".sqlite", ".sqlite3", ".db") or label == "sqlite":
+            sql_query = query or "SELECT name FROM sqlite_master WHERE type='table'"
+            return fetch_sqlite_query(resolved, sql=sql_query, limit=row_limit)
+
+        # JSON / JSONL
+        if label in ("json", "jsonl") or ext in (".json", ".jsonl"):
+            return fetch_json_data(resolved, path_expr=query, max_items=row_limit)
+
+        # CSV / TSV
+        if label in ("csv", "tsv") or ext in (".csv", ".tsv"):
+            return fetch_csv_data(
+                resolved,
+                columns=columns,
+                row_offset=row_offset,
+                row_limit=row_limit,
+                filter_col=filter_col,
+                filter_value=filter_value,
+            )
+
+        # Default fallback for text files: lines
+        return fetch_lines(resolved, start_line=1, end_line=row_limit)
+
     async def status(self) -> dict[str, Any]:
         text_count = vector_count = 0
         try:
@@ -493,16 +584,31 @@ class _ServerState:
 # ---------------------------------------------------------------------------
 
 
-def _hit_to_dict(hit: SearchHit) -> dict[str, Any]:
-    return {
-        "chunk_id": hit.chunk_id,
-        "rel_path": hit.rel_path,
-        "start": hit.start,
-        "end": hit.end,
-        "score": round(hit.score, 6),
-        "sources": list(hit.sources),
-        "snippet": _snippet(hit.text),
-    }
+def _snippet(text: str, query: str = "", limit: int = 300) -> str:
+    """Generate a high-signal snippet centered around query terms if present."""
+    import re
+
+    cleaned = " ".join(text.split())
+    if not query or not query.strip():
+        return cleaned if len(cleaned) <= limit else cleaned[:limit].rstrip() + "…"
+
+    # Find the earliest matching term
+    terms = [re.escape(t) for t in query.strip().split() if len(t) > 2]
+    if not terms:
+        return cleaned if len(cleaned) <= limit else cleaned[:limit].rstrip() + "…"
+
+    pattern = re.compile(r"(" + "|".join(terms) + r")", re.IGNORECASE)
+    match = pattern.search(cleaned)
+    if not match:
+        return cleaned if len(cleaned) <= limit else cleaned[:limit].rstrip() + "…"
+
+    start_idx = max(0, match.start() - 100)
+    end_idx = min(len(cleaned), start_idx + limit)
+    snippet = cleaned[start_idx:end_idx].strip()
+
+    prefix = "… " if start_idx > 0 else ""
+    suffix = " …" if end_idx < len(cleaned) else ""
+    return f"{prefix}{snippet}{suffix}"
 
 
 def _hit_to_dict_full(
@@ -518,9 +624,16 @@ def _hit_to_dict_full(
     }
 
 
-def _snippet(text: str, limit: int = 240) -> str:
-    text = text.strip().replace("\n", " ")
-    return text if len(text) <= limit else text[:limit].rstrip() + "…"
+def _hit_to_dict(hit: SearchHit, query: str = "") -> dict[str, Any]:
+    return {
+        "chunk_id": hit.chunk_id,
+        "rel_path": hit.rel_path,
+        "start": hit.start,
+        "end": hit.end,
+        "score": round(hit.score, 6),
+        "sources": list(hit.sources),
+        "snippet": _snippet(hit.text, query=query),
+    }
 
 
 def _now() -> float:

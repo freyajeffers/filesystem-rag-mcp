@@ -71,7 +71,14 @@ filesystem-rag-mcp --transport http --no-auth --host 127.0.0.1 --port 8000 --roo
     - `query` (string, required): Natural language search query or keywords.
     - `mode` (string, default: "hybrid"): `hybrid`, `fulltext`, or `semantic`.
     - `top_k` (integer, default: 10): Maximum number of search hits.
-    - `path_filter` (string, optional): Glob pattern or subfolder constraint (e.g. `src/**/*.py`).
+    - `alpha` (float, default: 0.5): Weighting between full-text (0.0) and vector (1.0).
+  - Returns ranked search hits with match scores, source indexes, and **contextual search snippets** windowed around matching terms.
+- `fetch_targeted_data`:
+  - Fine-grained, targeted data extraction from structured and tabular files:
+    - **SQLite**: Execute read-only SQL queries via `query` parameter (e.g. `SELECT id, name FROM users WHERE active=1`).
+    - **JSON / JSONL**: Query paths via `query` parameter (e.g. `users[0].address.city` or `config.database`).
+    - **CSV / TSV**: Select specific columns, apply row offsets/limits, and value match filters.
+    - **Text / Code**: Extract exact line ranges via `start_line` and `end_line`.
 - `read_file_markdown`:
   - Automatically converts diverse document and data formats (PDF, DOCX, PPTX, XLSX, HTML, IPYNB, CSV, RTF, JSON, YAML, TOML, XML, code) to clean Markdown.
   - Returns `{ "rel_path", "abs_path", "markdown", "length_chars" }`.
