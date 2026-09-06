@@ -10,6 +10,7 @@ date-correction note).
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import mimetypes
@@ -97,6 +98,7 @@ def build_server(settings: Settings, *, auth_provider: Any | None = None) -> MCP
 
     # Bind dependencies; capture via closures.
     state = _ServerState(settings)
+    state.start_background_indexing()
 
     @server.tool(
         name="search",
@@ -255,6 +257,43 @@ class _ServerState:
         self._vec: VectorStore | None = None
         self._engine: SearchEngine | None = None
         self._last_refresh_at: float | None = None
+        self._background_index_task: asyncio.Task[Any] | None = None
+        self._index_lock = asyncio.Lock()
+        self._initial_index_ready = asyncio.Event()
+
+    def start_background_indexing(self) -> None:
+        """Trigger background quick indexing on server startup."""
+        try:
+            loop = asyncio.get_running_loop()
+            self._background_index_task = loop.create_task(self._run_initial_index())
+        except RuntimeError:
+            # If no running event loop yet (e.g. synchronous init), wait for first async call
+            pass
+
+    async def _run_initial_index(self) -> None:
+        """Runs the quick initial indexing in the background."""
+        try:
+            log.info("initial_quick_index_start", root=str(self.settings.root_dir))
+            async with self._index_lock:
+                # Perform fast incremental refresh
+                await self._refresh_index_internal(full_rebuild=False)
+            log.info("initial_quick_index_complete", root=str(self.settings.root_dir))
+        except Exception as exc:
+            log.warning("initial_quick_index_failed", error=str(exc))
+        finally:
+            self._initial_index_ready.set()
+
+    async def ensure_indexed_synchronously(self) -> None:
+        """Ensures background indexing is completed synchronously before proceeding."""
+        if self._background_index_task and not self._background_index_task.done():
+            log.info("awaiting_background_index_for_complex_tool")
+            await self._initial_index_ready.wait()
+        elif not self._initial_index_ready.is_set():
+            # If background index was never spawned (e.g. no loop during build_server), run it now
+            async with self._index_lock:
+                if not self._initial_index_ready.is_set():
+                    await self._refresh_index_internal(full_rebuild=False)
+                    self._initial_index_ready.set()
 
     # ---- lazy initialization ------------------------------------------
 
@@ -293,6 +332,8 @@ class _ServerState:
                 "Specify alpha in range [0.0, 1.0], where 0.0 is pure vector and 1.0 is pure BM25 full-text.",
             )
         try:
+            # Synchronously await any pending background indexing so searches see fresh documents
+            await self.ensure_indexed_synchronously()
             self._ensure()
             assert self._engine is not None
             hits = self._engine.search(query, top_k=top_k, alpha=alpha)
@@ -306,7 +347,7 @@ class _ServerState:
         except Exception as exc:
             return search_error(query, "hybrid", str(exc))
 
-    async def refresh_index(self, *, full_rebuild: bool) -> dict[str, Any]:
+    async def _refresh_index_internal(self, *, full_rebuild: bool) -> dict[str, Any]:
         self._ensure()
         assert self._ft is not None and self._vec is not None
         log.info("refresh_index_start", full_rebuild=full_rebuild, root=str(self.settings.root_dir))
@@ -355,7 +396,14 @@ class _ServerState:
             "completed_at": self._last_refresh_at,
         }
 
+    async def refresh_index(self, *, full_rebuild: bool) -> dict[str, Any]:
+        async with self._index_lock:
+            res = await self._refresh_index_internal(full_rebuild=full_rebuild)
+            self._initial_index_ready.set()
+            return res
+
     async def get_chunk(self, chunk_id: str) -> dict[str, Any]:
+        await self.ensure_indexed_synchronously()
         self._ensure()
         assert self._engine is not None
         for hit in self._engine.ft.search(f"chunk_id:{chunk_id}", top_k=1):
