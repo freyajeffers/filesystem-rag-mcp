@@ -18,7 +18,8 @@ from fnmatch import fnmatch
 from pathlib import Path
 
 from .config import Settings
-from .security import is_text_file, safe_resolve
+from .converter import convert_file_to_markdown
+from .security import is_indexable_file, safe_resolve
 
 
 @dataclass(slots=True, frozen=True)
@@ -81,7 +82,7 @@ def discover_files(settings: Settings) -> list[FileMeta]:
             continue
         if st.st_size > settings.max_file_bytes:
             continue
-        if not is_text_file(resolved):
+        if not is_indexable_file(resolved):
             continue
         try:
             with resolved.open("rb") as fh:
@@ -176,11 +177,14 @@ def _split_paragraphs(text: str) -> list[str]:
 
 
 def chunk_file(file_meta: FileMeta, settings: Settings) -> list[Chunk]:
-    """Read `file_meta.abs_path` and return its chunks."""
+    """Read and convert `file_meta.abs_path` to Markdown, then return its chunks."""
     try:
-        text = file_meta.abs_path.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return []
+        text = convert_file_to_markdown(file_meta.abs_path)
+    except Exception:
+        try:
+            text = file_meta.abs_path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return []
     raw_chunks = chunk_text(
         text, chunk_size=settings.chunk_size, overlap=settings.chunk_overlap
     )

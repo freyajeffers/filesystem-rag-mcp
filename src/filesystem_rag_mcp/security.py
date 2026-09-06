@@ -48,9 +48,54 @@ def safe_resolve(root: Path, candidate: str | Path) -> Path:
     return resolved_candidate
 
 
-def ensure_inside_root(settings: Settings, p: Path) -> Path:
-    """Convenience wrapper: resolve and validate a single path."""
-    return safe_resolve(settings.root_dir, p)
+SUPPORTED_CONVERTIBLE_EXTENSIONS: frozenset[str] = frozenset({
+    ".pdf",
+    ".docx",
+    ".pptx",
+    ".xlsx",
+    ".xls",
+    ".ipynb",
+    ".html",
+    ".htm",
+    ".rtf",
+    ".epub",
+    ".csv",
+    ".tsv",
+    ".json",
+    ".yaml",
+    ".yml",
+    ".toml",
+    ".xml",
+    ".md",
+    ".markdown",
+    ".rst",
+    ".txt",
+    ".py",
+    ".js",
+    ".ts",
+    ".tsx",
+    ".jsx",
+    ".go",
+    ".rs",
+    ".java",
+    ".c",
+    ".cpp",
+    ".h",
+    ".hpp",
+    ".sh",
+    ".bash",
+    ".zsh",
+    ".sql",
+})
+
+
+def is_indexable_file(path: Path) -> bool:
+    """Check if file can be indexed (either supported convertible extension or text)."""
+    ext = path.suffix.lower()
+    if ext in SUPPORTED_CONVERTIBLE_EXTENSIONS:
+        return True
+    return is_text_file(path)
+
 
 
 def is_text_file(path: Path, sniff_bytes: int = 8192) -> bool:

@@ -10,7 +10,9 @@ date-correction note).
 
 from __future__ import annotations
 
+import base64
 import json
+import mimetypes
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +25,7 @@ from .fulltext import FullTextStore
 from .indexing import Chunk, chunk_file, discover_files
 from .logging_setup import get_logger
 from .search import SearchEngine, SearchHit
+from .converter import convert_file_to_markdown
 from .security import PathSecurityError, safe_resolve
 from .vector import Embedder, VectorStore
 
@@ -134,6 +137,33 @@ def build_server(settings: Settings, *, auth_provider: Any | None = None) -> MCP
         max_bytes: int | None = None,
     ) -> dict[str, Any]:
         return await state.read_file(rel_path=rel_path, max_bytes=max_bytes)
+
+    @server.tool(
+        name="read_file_markdown",
+        description=(
+            "Convert any document (PDF, DOCX, PPTX, XLSX, HTML, IPYNB, CSV, RTF, "
+            "JSON, YAML, text, code) to clean Markdown. Validated against root."
+        ),
+        annotations=ToolAnnotations(readOnlyHint=True),
+    )
+    async def read_file_markdown_tool(
+        rel_path: str,
+    ) -> dict[str, Any]:
+        return await state.read_file_markdown(rel_path=rel_path)
+
+    @server.tool(
+        name="download_file_raw",
+        description=(
+            "Download/read a raw file as base64-encoded bytes with MIME type. "
+            "Suitable for downloading binary files, images, PDFs, etc. Validated against root."
+        ),
+        annotations=ToolAnnotations(readOnlyHint=True),
+    )
+    async def download_file_raw_tool(
+        rel_path: str,
+        max_bytes: int | None = None,
+    ) -> dict[str, Any]:
+        return await state.download_file_raw(rel_path=rel_path, max_bytes=max_bytes)
 
     # Resources — index status and metadata
     @server.resource(
@@ -308,6 +338,63 @@ class _ServerState:
             "size_bytes": len(data),
             "truncated": truncated,
             "text": text,
+        }
+
+    async def read_file_markdown(self, *, rel_path: str) -> dict[str, Any]:
+        """Convert any supported file type to clean Markdown."""
+        try:
+            root = self.settings.root_dir.resolve()
+            resolved = safe_resolve(root, rel_path)
+        except PathSecurityError as exc:
+            return {"error": str(exc)}
+        if not resolved.exists() or not resolved.is_file():
+            return {"error": f"{rel_path!r} does not exist or is not a file"}
+        try:
+            markdown = convert_file_to_markdown(resolved)
+            return {
+                "rel_path": str(resolved.relative_to(root)),
+                "abs_path": str(resolved),
+                "markdown": markdown,
+                "length_chars": len(markdown),
+            }
+        except Exception as exc:
+            return {"error": f"conversion failed: {exc}"}
+
+    async def download_file_raw(
+        self, *, rel_path: str, max_bytes: int | None
+    ) -> dict[str, Any]:
+        """Download raw file as base64 with MIME type."""
+        try:
+            root = self.settings.root_dir.resolve()
+            resolved = safe_resolve(root, rel_path)
+        except PathSecurityError as exc:
+            return {"error": str(exc)}
+        if not resolved.exists() or not resolved.is_file():
+            return {"error": f"{rel_path!r} does not exist or is not a file"}
+        try:
+            data = resolved.read_bytes()
+        except OSError as exc:
+            return {"error": f"read failed: {exc}"}
+
+        total_size = len(data)
+        truncated = False
+        if max_bytes is not None and total_size > max_bytes:
+            data = data[:max_bytes]
+            truncated = True
+
+        mime_type, _ = mimetypes.guess_type(str(resolved))
+        if not mime_type:
+            mime_type = "application/octet-stream"
+
+        encoded = base64.b64encode(data).decode("ascii")
+        return {
+            "rel_path": str(resolved.relative_to(root)),
+            "abs_path": str(resolved),
+            "mime_type": mime_type,
+            "total_size_bytes": total_size,
+            "returned_size_bytes": len(data),
+            "truncated": truncated,
+            "base64_data": encoded,
         }
 
     async def status(self) -> dict[str, Any]:

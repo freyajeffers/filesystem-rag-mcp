@@ -59,6 +59,16 @@ filesystem-rag-mcp --transport http --no-auth --host 127.0.0.1 --port 8000 --roo
     - `mode` (string, default: "hybrid"): `hybrid`, `fulltext`, or `semantic`.
     - `top_k` (integer, default: 10): Maximum number of search hits.
     - `path_filter` (string, optional): Glob pattern or subfolder constraint (e.g. `src/**/*.py`).
+- `read_file_markdown`:
+  - Automatically converts diverse document and data formats (PDF, DOCX, PPTX, XLSX, HTML, IPYNB, CSV, RTF, JSON, YAML, TOML, XML, code) to clean Markdown.
+  - Returns `{ "rel_path", "abs_path", "markdown", "length_chars" }`.
+- `download_file_raw`:
+  - Downloads binary or text files as base64 with auto-detected MIME type and size headers.
+  - Returns `{ "rel_path", "abs_path", "mime_type", "total_size_bytes", "returned_size_bytes", "truncated", "base64_data" }`.
+- `read_file`:
+  - Read plain text files with optional byte truncation.
+- `get_chunk`:
+  - Inspect full chunk contents by ID.
 - `refresh_index`:
   - Force re-indexing of documents and chunk caching.
 
