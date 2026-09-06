@@ -5,6 +5,19 @@ Local filesystem RAG MCP server combining vector/semantic search and full-text (
 ## Features
 
 - **MCP Protocol Conformance**: Built against MCP specification 2026-07-28 (`mcp[cli]>=1.21.0`), supporting tool calling, resources (`fs://stats`, `fs://config`), and prompts (`rag_query`).
+- **Universal File to Markdown Conversion**:
+  - Converts virtually **any** file type to clean, informative Markdown on demand:
+    - **Documents & Office**: PDF, Word (DOCX/DOC), PowerPoint (PPTX/PPT), Excel (XLSX/XLS), RTF, EPUB.
+    - **Notebooks & Code**: Jupyter Notebooks (`.ipynb`) with inputs/outputs/markdown, Python, JavaScript, TypeScript, Rust, Go, C/C++, Java, Shell, etc.
+    - **Structured Data**: JSON, JSONL, YAML, TOML, XML, CSV, TSV, SQL.
+    - **Databases**: SQLite (`.sqlite`, `.db`, `.sqlite3`) with schema extraction and row previews.
+    - **Archives**: ZIP, TAR, TGZ manifests and directory listings.
+    - **Media & Audio**: MP3, WAV, FLAC, OGG, M4A with metadata tags (ID3, Vorbis) and audio stream properties.
+    - **Images**: Dimensions, format, color mode, and EXIF camera metadata.
+    - **Emails**: `.eml` and RFC 822 messages with headers, body parts, and attachment lists.
+    - **Binary & Firmware**: Formatted hexdump summaries with embedded printable ASCII string extraction.
+- **Deep Content-Type Detection**:
+  - Integrates **Google Magika AI** and magic byte inspection so files are classified and converted accurately regardless of extension or missing extensions.
 - **Dual Transports**:
   - `stdio`: Standard input/output transport for local desktop assistants and CLI hosts (Claude Desktop, Hermes, etc.).
   - `http`: Modern Streamable HTTP transport for remote and web deployments.

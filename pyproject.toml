@@ -59,6 +59,7 @@ dependencies = [
     "striprtf>=0.0.26",
     "nbformat>=5.9.0",
     "ebooklib>=0.18",
+    "mutagen>=1.47.0",
     "markitdown>=0.1.7",
     # Path security
     "pathvalidate>=3.2.0",
