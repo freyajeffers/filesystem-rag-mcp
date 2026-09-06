@@ -28,6 +28,7 @@ from .logging_setup import get_logger
 from .search import SearchEngine, SearchHit
 from .fetcher import fetch_csv_data, fetch_json_data, fetch_lines, fetch_sqlite_query
 from .tree import list_directory
+from .grep import grep_search
 from .watcher import DirectoryWatcher
 from .converter import convert_file_to_markdown
 from .detector import detect_file_type
@@ -122,6 +123,7 @@ def build_server(settings: Settings, *, auth_provider: Any | None = None) -> MCP
         alpha: float | None = None,
         path_glob: str | None = None,
         rerank: bool = False,
+        fuzzy: bool = False,
         wait_for_indexing: bool = False,
     ) -> dict[str, Any]:
         return await state.search(
@@ -130,6 +132,7 @@ def build_server(settings: Settings, *, auth_provider: Any | None = None) -> MCP
             alpha=alpha,
             path_glob=path_glob,
             rerank=rerank,
+            fuzzy=fuzzy,
             wait_for_indexing=wait_for_indexing,
         )
 
@@ -266,6 +269,84 @@ def build_server(settings: Settings, *, auth_provider: Any | None = None) -> MCP
             filter_value=filter_value,
             start_line=start_line,
             end_line=end_line,
+        )
+
+    @server.tool(
+        name="grep_search",
+        description=(
+            "Exact regex or substring search across files in the workspace. "
+            "Returns matching lines with context lines, line numbers, and file paths. "
+            "Supports path_glob filtering (e.g. 'src/**/*.py') and case sensitivity."
+        ),
+        annotations=ToolAnnotations(readOnlyHint=True),
+    )
+    async def grep_search_tool(
+        pattern: str,
+        path_glob: str | None = None,
+        max_matches: int = 100,
+        case_sensitive: bool = False,
+        context_lines: int = 2,
+        sub_dir: str = "",
+    ) -> dict[str, Any]:
+        return state.grep(
+            pattern=pattern,
+            path_glob=path_glob,
+            max_matches=max_matches,
+            case_sensitive=case_sensitive,
+            context_lines=context_lines,
+            sub_dir=sub_dir,
+        )
+
+    @server.tool(
+        name="read_files_batch",
+        description=(
+            "Inspect multiple files concurrently in a single roundtrip. "
+            "Returns a mapping of relative paths to contents or structured error objects. "
+            "Supports Markdown conversion (`as_markdown=True`) or raw text."
+        ),
+        annotations=ToolAnnotations(readOnlyHint=True),
+    )
+    async def read_files_batch_tool(
+        rel_paths: list[str],
+        as_markdown: bool = True,
+        max_bytes_per_file: int | None = None,
+    ) -> dict[str, Any]:
+        return await state.read_files_batch(
+            rel_paths=rel_paths,
+            as_markdown=as_markdown,
+            max_bytes_per_file=max_bytes_per_file,
+        )
+
+    @server.tool(
+        name="refresh_file",
+        description=(
+            "Incrementally (re-)chunk and re-index a single specific file into full-text and vector stores "
+            "in <50ms without walking the rest of the workspace."
+        ),
+        annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False),
+    )
+    async def refresh_file_tool(
+        rel_path: str,
+    ) -> dict[str, Any]:
+        return await state.refresh_file(rel_path=rel_path)
+
+    @server.tool(
+        name="get_chunk_context",
+        description=(
+            "Fetch contextual neighbor chunks surrounding a chunk_id from the same file. "
+            "Expands awareness of the document before and after a search hit."
+        ),
+        annotations=ToolAnnotations(readOnlyHint=True),
+    )
+    async def get_chunk_context_tool(
+        chunk_id: str,
+        before_chunks: int = 1,
+        after_chunks: int = 1,
+    ) -> dict[str, Any]:
+        return await state.get_chunk_context(
+            chunk_id=chunk_id,
+            before_chunks=before_chunks,
+            after_chunks=after_chunks,
         )
 
     # Resources — index status and metadata
@@ -415,6 +496,7 @@ class _ServerState:
         alpha: float | None,
         path_glob: str | None = None,
         rerank: bool = False,
+        fuzzy: bool = False,
         wait_for_indexing: bool = False,
     ) -> dict[str, Any]:
         if not query or not query.strip():
@@ -473,6 +555,7 @@ class _ServerState:
                 alpha=applied_alpha,
                 path_glob=path_glob,
                 rerank=rerank,
+                fuzzy=fuzzy,
             )
             return {
                 "success": True,
@@ -776,6 +859,181 @@ class _ServerState:
 
         # Default fallback for text files: lines
         return fetch_lines(resolved, start_line=1, end_line=row_limit)
+
+    def grep(
+        self,
+        *,
+        pattern: str,
+        path_glob: str | None = None,
+        max_matches: int = 100,
+        case_sensitive: bool = False,
+        context_lines: int = 2,
+        sub_dir: str = "",
+    ) -> dict[str, Any]:
+        root = Path(self.settings.root_dir).resolve()
+        return grep_search(
+            root,
+            pattern=pattern,
+            path_glob=path_glob,
+            max_matches=max_matches,
+            case_sensitive=case_sensitive,
+            context_lines=context_lines,
+            sub_dir=sub_dir,
+        )
+
+    async def read_files_batch(
+        self,
+        *,
+        rel_paths: list[str],
+        as_markdown: bool = True,
+        max_bytes_per_file: int | None = None,
+    ) -> dict[str, Any]:
+        if not rel_paths:
+            return invalid_parameter_error(
+                "rel_paths",
+                rel_paths,
+                "rel_paths list cannot be empty",
+                "Provide a list of relative file paths to inspect, e.g. ['src/app.py', 'README.md'].",
+            )
+        if len(rel_paths) > 50:
+            return invalid_parameter_error(
+                "rel_paths",
+                len(rel_paths),
+                "rel_paths exceeds batch limit of 50 files",
+                "Request at most 50 files per batch call.",
+            )
+
+        async def _inspect_one(p: str) -> tuple[str, dict[str, Any]]:
+            if as_markdown:
+                res = await self.read_file_markdown(rel_path=p)
+            else:
+                res = await self.read_file(rel_path=p, max_bytes=max_bytes_per_file)
+            return p, res
+
+        results = await asyncio.gather(*[_inspect_one(p) for p in rel_paths])
+        return {
+            "success": True,
+            "count": len(results),
+            "files": {path: res for path, res in results},
+        }
+
+    async def refresh_file(self, *, rel_path: str) -> dict[str, Any]:
+        root = Path(self.settings.root_dir).resolve()
+        try:
+            resolved = safe_resolve(root, rel_path)
+        except PathSecurityError as exc:
+            return path_traversal_error(rel_path, str(root), str(exc))
+
+        if not resolved.exists():
+            return file_not_found_error(rel_path, str(root))
+        if not resolved.is_file():
+            return not_a_file_error(rel_path)
+
+        from .indexing import FileMeta, chunk_file
+        from .security import is_indexable_file
+        from .detector import detect_file_type
+        import hashlib
+        import os
+
+        if not is_indexable_file(resolved, allow_binary=self.settings.index_binary_files):
+            return {
+                "success": False,
+                "rel_path": rel_path,
+                "message": "File is not indexable based on current settings",
+            }
+
+        st = resolved.stat()
+        h = hashlib.sha256()
+        with resolved.open("rb") as f:
+            while chunk := f.read(65536):
+                h.update(chunk)
+        fm = FileMeta(
+            rel_path=str(resolved.relative_to(root)),
+            abs_path=resolved,
+            size=st.st_size,
+            mtime_ns=st.st_mtime_ns,
+            sha256=h.hexdigest(),
+        )
+
+        chunks = chunk_file(fm, self.settings)
+
+        self._ensure()
+        assert self._ft is not None and self._vec is not None
+
+        # Clean existing chunks for this rel_path
+        self._ft.delete_by_rel_path(fm.rel_path)
+        self._vec.delete_by_rel_path(fm.rel_path)
+
+        if chunks:
+            self._ft.upsert(chunks)
+            if self.settings.index_binary_vectors:
+                self._vec.upsert(chunks)
+            else:
+                type_info = detect_file_type(resolved)
+                if type_info.is_text or type_info.is_convertible:
+                    self._vec.upsert(chunks)
+
+        return {
+            "success": True,
+            "rel_path": fm.rel_path,
+            "chunks_indexed": len(chunks),
+            "size_bytes": fm.size,
+        }
+
+    async def get_chunk_context(
+        self, *, chunk_id: str, before_chunks: int = 1, after_chunks: int = 1
+    ) -> dict[str, Any]:
+        center = await self.get_chunk(chunk_id)
+        if not center.get("rel_path"):
+            return center
+
+        rel_path = center["rel_path"]
+        center_start = center.get("start", 0)
+
+        # Retrieve all chunks for this relative path
+        self._ensure()
+        assert self._ft is not None
+        all_hits = self._ft.search(f'rel_path:"{rel_path}"', top_k=200)
+
+        # Filter to exact file and sort by start offset
+        file_chunks = [h for h in all_hits if h.rel_path == rel_path]
+        file_chunks.sort(key=lambda x: x.start)
+
+        center_idx = -1
+        for idx, ch in enumerate(file_chunks):
+            if ch.chunk_id == chunk_id:
+                center_idx = idx
+                break
+
+        if center_idx == -1:
+            return {
+                "chunk_id": chunk_id,
+                "center": center,
+                "before": [],
+                "after": [],
+            }
+
+        start_b = max(0, center_idx - before_chunks)
+        end_a = min(len(file_chunks), center_idx + after_chunks + 1)
+
+        before = [
+            _hit_to_dict_full(c.chunk_id, c.rel_path, c.file_path, c.start, c.end, c.text)
+            for c in file_chunks[start_b:center_idx]
+        ]
+        after = [
+            _hit_to_dict_full(c.chunk_id, c.rel_path, c.file_path, c.start, c.end, c.text)
+            for c in file_chunks[center_idx + 1:end_a]
+        ]
+
+        return {
+            "success": True,
+            "chunk_id": chunk_id,
+            "rel_path": rel_path,
+            "center": center,
+            "before": before,
+            "after": after,
+            "total_file_chunks": len(file_chunks),
+        }
 
     async def get_indexing_status(self, wait: bool = False, timeout_seconds: float = 30.0) -> dict[str, Any]:
         """Check live background indexing state, with optional caller wait."""

@@ -74,8 +74,17 @@ filesystem-rag-mcp --transport http --no-auth --host 127.0.0.1 --port 8000 --roo
     - `alpha` (float, default: 0.5): Weighting between full-text (0.0) and vector (1.0).
     - `path_glob` (string, optional): Glob pattern (e.g. `src/**/*.py`, `docs/*.md`) to filter search hits.
     - `rerank` (boolean, default: false): Apply neural cross-encoder reranking (FlashRank) over top candidates.
+    - `fuzzy` (boolean, default: false): Enable typo-tolerant fuzzy matching / query term expansion for misspelled terms.
     - `wait_for_indexing` (boolean, default: false): If `false`, immediately executes searches using whatever index is currently available without blocking caller; if `true`, waits for background thorough indexing to complete.
   - Returns ranked search hits with match scores, source indexes, contextual snippets, and an `index_state` object notifying the caller of background indexing progress.
+- `grep_search`:
+  - Fast, sandboxed regex or exact substring search across files with line numbers and context lines.
+- `read_files_batch`:
+  - Concurrently reads and converts multiple files in a single tool call.
+- `refresh_file`:
+  - Incrementally re-indexes a single file in `<50ms` without global disk traversal.
+- `get_chunk_context`:
+  - Retrieves preceding and succeeding chunk neighbors around a given `chunk_id`.
 - `list_directory`:
   - Sandboxed tree/directory exploration tool.
   - Parameters:

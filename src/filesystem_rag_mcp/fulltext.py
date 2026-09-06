@@ -20,7 +20,7 @@ from typing import Iterable
 from whoosh import index
 from whoosh.analysis import StemmingAnalyzer
 from whoosh.fields import ID, NUMERIC, TEXT, Schema
-from whoosh.qparser import MultifieldParser, OrGroup
+from whoosh.qparser import FuzzyTermPlugin, MultifieldParser, OrGroup
 from whoosh.query import Query
 from whoosh.searching import Hit
 
@@ -103,16 +103,48 @@ class FullTextStore:
                     ids.add(cid)
         return ids
 
-    def search(self, query: str, top_k: int) -> list[TextHit]:
+    def search(
+        self, query: str, top_k: int, fuzzy: bool = False
+    ) -> list[TextHit]:
         if not query.strip():
             return []
         with self._ix.searcher() as s:
             parser = MultifieldParser(
                 ["text", "rel_path"], schema=self._ix.schema, group=OrGroup
             )
-            q: Query = parser.parse(query)
-            raw_hits = s.search(q, limit=top_k)
-            return [_normalize_hit(s, h) for h in raw_hits]
+            if fuzzy:
+                parser.add_plugin(FuzzyTermPlugin())
+                # Append ~1 fuzzy operator to single terms if not already present
+                terms = [
+                    f"{t}~1" if not any(c in t for c in "~*?^") and len(t) > 3 else t
+                    for t in query.strip().split()
+                ]
+                effective_query = " ".join(terms)
+            else:
+                effective_query = query
+
+            try:
+                q: Query = parser.parse(effective_query)
+                raw_hits = s.search(q, limit=top_k)
+                hits = [_normalize_hit(s, h) for h in raw_hits]
+            except Exception:
+                hits = []
+
+            # If normal search yielded nothing and fuzzy wasn't requested, retry with fuzzy expansion
+            if not hits and not fuzzy:
+                try:
+                    parser.add_plugin(FuzzyTermPlugin())
+                    terms = [
+                        f"{t}~1" if not any(c in t for c in "~*?^") and len(t) > 3 else t
+                        for t in query.strip().split()
+                    ]
+                    q = parser.parse(" ".join(terms))
+                    raw_hits = s.search(q, limit=top_k)
+                    hits = [_normalize_hit(s, h) for h in raw_hits]
+                except Exception:
+                    pass
+
+            return hits
 
     def count(self) -> int:
         with self._ix.searcher() as s:

@@ -69,13 +69,14 @@ class SearchEngine:
         alpha: float | None = None,
         path_glob: str | None = None,
         rerank: bool = False,
+        fuzzy: bool = False,
     ) -> list[SearchHit]:
         k = top_k if top_k is not None else self.settings.default_top_k
         a = alpha if alpha is not None else self.settings.hybrid_alpha
         # Over-fetch for fusion, path filtering, and reranking
         fetch = max(k * 4, 50)
 
-        text_hits: list[TextHit] = self.ft.search(query, fetch) if a < 1.0 else []
+        text_hits: list[TextHit] = self.ft.search(query, fetch, fuzzy=fuzzy) if a < 1.0 else []
         vec_hits: list[VectorHit] = self.vec.search(query, fetch) if a > 0.0 else []
 
         # Apply path_glob filter if requested
