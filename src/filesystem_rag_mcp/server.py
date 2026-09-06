@@ -257,43 +257,63 @@ class _ServerState:
         self._vec: VectorStore | None = None
         self._engine: SearchEngine | None = None
         self._last_refresh_at: float | None = None
-        self._background_index_task: asyncio.Task[Any] | None = None
+        self._background_quick_task: asyncio.Task[Any] | None = None
+        self._background_thorough_task: asyncio.Task[Any] | None = None
         self._index_lock = asyncio.Lock()
-        self._initial_index_ready = asyncio.Event()
+        self._quick_index_ready = asyncio.Event()
+        self._thorough_index_ready = asyncio.Event()
 
     def start_background_indexing(self) -> None:
-        """Trigger background quick indexing on server startup."""
+        """Trigger fast quick indexing and thorough deep indexing concurrently on server startup."""
         try:
             loop = asyncio.get_running_loop()
-            self._background_index_task = loop.create_task(self._run_initial_index())
+            self._background_quick_task = loop.create_task(self._run_quick_index())
+            self._background_thorough_task = loop.create_task(self._run_thorough_index())
         except RuntimeError:
             # If no running event loop yet (e.g. synchronous init), wait for first async call
             pass
 
-    async def _run_initial_index(self) -> None:
-        """Runs the quick initial indexing in the background."""
+    async def _run_quick_index(self) -> None:
+        """Runs the quick full-text initial indexing in the background for fast query readiness."""
         try:
             log.info("initial_quick_index_start", root=str(self.settings.root_dir))
             async with self._index_lock:
-                # Perform fast incremental refresh
-                await self._refresh_index_internal(full_rebuild=False)
+                await self._refresh_index_internal(full_rebuild=False, vector_index=False)
             log.info("initial_quick_index_complete", root=str(self.settings.root_dir))
         except Exception as exc:
             log.warning("initial_quick_index_failed", error=str(exc))
         finally:
-            self._initial_index_ready.set()
+            self._quick_index_ready.set()
 
-    async def ensure_indexed_synchronously(self) -> None:
-        """Ensures background indexing is completed synchronously before proceeding."""
-        if self._background_index_task and not self._background_index_task.done():
-            log.info("awaiting_background_index_for_complex_tool")
-            await self._initial_index_ready.wait()
-        elif not self._initial_index_ready.is_set():
-            # If background index was never spawned (e.g. no loop during build_server), run it now
+    async def _run_thorough_index(self) -> None:
+        """Runs thorough indexing (full vector embeddings + deep scan) alongside quick index."""
+        try:
+            # Allow quick index to claim the lock first if both start simultaneously
+            await asyncio.sleep(0.05)
+            # Ensure quick index completes before proceeding with thorough vector pass
+            await self._quick_index_ready.wait()
+            log.info("thorough_deep_index_start", root=str(self.settings.root_dir))
             async with self._index_lock:
-                if not self._initial_index_ready.is_set():
-                    await self._refresh_index_internal(full_rebuild=False)
-                    self._initial_index_ready.set()
+                await self._refresh_index_internal(full_rebuild=False, vector_index=True)
+            log.info("thorough_deep_index_complete", root=str(self.settings.root_dir))
+        except Exception as exc:
+            log.warning("thorough_deep_index_failed", error=str(exc))
+        finally:
+            self._thorough_index_ready.set()
+
+    async def ensure_indexed_synchronously(self, require_thorough: bool = False) -> None:
+        """Ensures indexing is completed synchronously before proceeding with complex tools."""
+        target_ready = self._thorough_index_ready if require_thorough else self._quick_index_ready
+        target_task = self._background_thorough_task if require_thorough else self._background_quick_task
+
+        if target_task and not target_task.done():
+            log.info("awaiting_indexing_for_tool", require_thorough=require_thorough)
+            await target_ready.wait()
+        elif not target_ready.is_set():
+            async with self._index_lock:
+                if not target_ready.is_set():
+                    await self._refresh_index_internal(full_rebuild=False, vector_index=require_thorough)
+                    target_ready.set()
 
     # ---- lazy initialization ------------------------------------------
 
@@ -332,8 +352,9 @@ class _ServerState:
                 "Specify alpha in range [0.0, 1.0], where 0.0 is pure vector and 1.0 is pure BM25 full-text.",
             )
         try:
-            # Synchronously await any pending background indexing so searches see fresh documents
-            await self.ensure_indexed_synchronously()
+            # If alpha > 0, semantic vector ranking is required -> require thorough index
+            needs_vector = alpha is None or alpha > 0.0
+            await self.ensure_indexed_synchronously(require_thorough=needs_vector)
             self._ensure()
             assert self._engine is not None
             hits = self._engine.search(query, top_k=top_k, alpha=alpha)
@@ -347,18 +368,27 @@ class _ServerState:
         except Exception as exc:
             return search_error(query, "hybrid", str(exc))
 
-    async def _refresh_index_internal(self, *, full_rebuild: bool) -> dict[str, Any]:
+    async def _refresh_index_internal(
+        self, *, full_rebuild: bool, vector_index: bool = True
+    ) -> dict[str, Any]:
         self._ensure()
         assert self._ft is not None and self._vec is not None
-        log.info("refresh_index_start", full_rebuild=full_rebuild, root=str(self.settings.root_dir))
+        log.info(
+            "refresh_index_start",
+            full_rebuild=full_rebuild,
+            vector_index=vector_index,
+            root=str(self.settings.root_dir),
+        )
         files = discover_files(self.settings)
-        # On full rebuild, clear both indexes first.
+        # On full rebuild, clear selected indexes first.
         if full_rebuild:
-            for cid in list(self._vec.all_chunk_ids()):
-                self._vec.delete_by_chunk_id(cid)
             for cid in list(self._ft.all_chunk_ids()):
                 self._ft.delete_by_chunk_id(cid)
-        # Index files: chunk -> upsert into both stores
+            if vector_index:
+                for cid in list(self._vec.all_chunk_ids()):
+                    self._vec.delete_by_chunk_id(cid)
+
+        # Index files: chunk -> upsert into stores
         new_chunk_ids: set[str] = set()
         new_rel_paths: set[str] = set()
         indexed_files = 0
@@ -368,28 +398,34 @@ class _ServerState:
             if not chunks:
                 continue
             self._ft.upsert(chunks)
-            self._vec.upsert(chunks)
+            if vector_index:
+                self._vec.upsert(chunks)
             new_chunk_ids.update(c.chunk_id for c in chunks)
             new_rel_paths.add(fm.rel_path)
             indexed_files += 1
             indexed_chunks += len(chunks)
-        # Evict stale chunks whose rel_path is no longer present (or whose
-        # chunk_id no longer matches the current set).
+
+        # Evict stale chunks whose rel_path is no longer present
         all_text_ids = self._ft.all_chunk_ids()
-        all_vec_ids = self._vec.all_chunk_ids()
         for stale_id in all_text_ids - new_chunk_ids:
             self._ft.delete_by_chunk_id(stale_id)
-        for stale_id in all_vec_ids - new_chunk_ids:
-            self._vec.delete_by_chunk_id(stale_id)
+
+        if vector_index:
+            all_vec_ids = self._vec.all_chunk_ids()
+            for stale_id in all_vec_ids - new_chunk_ids:
+                self._vec.delete_by_chunk_id(stale_id)
+
         self._last_refresh_at = _now()
         log.info(
             "refresh_index_done",
             files=indexed_files,
             chunks=indexed_chunks,
             full_rebuild=full_rebuild,
+            vector_index=vector_index,
         )
         return {
             "full_rebuild": full_rebuild,
+            "vector_index": vector_index,
             "files_indexed": indexed_files,
             "chunks_indexed": indexed_chunks,
             "root": str(self.settings.root_dir),
@@ -398,8 +434,9 @@ class _ServerState:
 
     async def refresh_index(self, *, full_rebuild: bool) -> dict[str, Any]:
         async with self._index_lock:
-            res = await self._refresh_index_internal(full_rebuild=full_rebuild)
-            self._initial_index_ready.set()
+            res = await self._refresh_index_internal(full_rebuild=full_rebuild, vector_index=True)
+            self._quick_index_ready.set()
+            self._thorough_index_ready.set()
             return res
 
     async def get_chunk(self, chunk_id: str) -> dict[str, Any]:
