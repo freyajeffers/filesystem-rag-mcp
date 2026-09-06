@@ -26,6 +26,17 @@ from .indexing import Chunk, chunk_file, discover_files
 from .logging_setup import get_logger
 from .search import SearchEngine, SearchHit
 from .converter import convert_file_to_markdown
+from .detector import detect_file_type
+from .errors import (
+    chunk_not_found_error,
+    conversion_error,
+    file_not_found_error,
+    file_read_error,
+    invalid_parameter_error,
+    not_a_file_error,
+    path_traversal_error,
+    search_error,
+)
 from .security import PathSecurityError, safe_resolve
 from .vector import Embedder, VectorStore
 
@@ -226,17 +237,40 @@ class _ServerState:
     async def search(
         self, *, query: str, top_k: int | None, alpha: float | None
     ) -> dict[str, Any]:
-        self._ensure()
         if not query or not query.strip():
-            return {"query": query, "results": []}
-        assert self._engine is not None
-        hits = self._engine.search(query, top_k=top_k, alpha=alpha)
-        return {
-            "query": query,
-            "top_k": top_k or self.settings.default_top_k,
-            "alpha": alpha if alpha is not None else self.settings.hybrid_alpha,
-            "results": [_hit_to_dict(h) for h in hits],
-        }
+            return invalid_parameter_error(
+                "query",
+                query,
+                "Query string cannot be empty",
+                "Provide a non-empty search string with relevant keywords or questions.",
+            )
+        if top_k is not None and (top_k <= 0 or top_k > 500):
+            return invalid_parameter_error(
+                "top_k",
+                top_k,
+                "top_k must be between 1 and 500",
+                "Specify a top_k integer between 1 and 500, e.g., top_k=10.",
+            )
+        if alpha is not None and not (0.0 <= alpha <= 1.0):
+            return invalid_parameter_error(
+                "alpha",
+                alpha,
+                "alpha must be between 0.0 and 1.0",
+                "Specify alpha in range [0.0, 1.0], where 0.0 is pure vector and 1.0 is pure BM25 full-text.",
+            )
+        try:
+            self._ensure()
+            assert self._engine is not None
+            hits = self._engine.search(query, top_k=top_k, alpha=alpha)
+            return {
+                "success": True,
+                "query": query,
+                "top_k": top_k or self.settings.default_top_k,
+                "alpha": alpha if alpha is not None else self.settings.hybrid_alpha,
+                "results": [_hit_to_dict(h) for h in hits],
+            }
+        except Exception as exc:
+            return search_error(query, "hybrid", str(exc))
 
     async def refresh_index(self, *, full_rebuild: bool) -> dict[str, Any]:
         self._ensure()
@@ -307,22 +341,24 @@ class _ServerState:
                 "end": int(meta.get("end", 0)),
                 "text": str(result["documents"][0]) if result["documents"] else "",
             }
-        return {"error": f"chunk {chunk_id!r} not found"}
+        return chunk_not_found_error(chunk_id)
 
     async def read_file(
         self, *, rel_path: str, max_bytes: int | None
     ) -> dict[str, Any]:
+        root = self.settings.root_dir.resolve()
         try:
-            root = self.settings.root_dir.resolve()
             resolved = safe_resolve(root, rel_path)
         except PathSecurityError as exc:
-            return {"error": str(exc)}
-        if not resolved.exists() or not resolved.is_file():
-            return {"error": f"{rel_path!r} does not exist or is not a file"}
+            return path_traversal_error(rel_path, str(root), str(exc))
+        if not resolved.exists():
+            return file_not_found_error(rel_path, str(root))
+        if not resolved.is_file():
+            return not_a_file_error(rel_path)
         try:
             data = resolved.read_bytes()
         except OSError as exc:
-            return {"error": f"read failed: {exc}"}
+            return file_read_error(rel_path, str(exc))
         if max_bytes is not None and len(data) > max_bytes:
             data = data[:max_bytes]
             truncated = True
@@ -342,13 +378,15 @@ class _ServerState:
 
     async def read_file_markdown(self, *, rel_path: str) -> dict[str, Any]:
         """Convert any supported file type to clean Markdown."""
+        root = self.settings.root_dir.resolve()
         try:
-            root = self.settings.root_dir.resolve()
             resolved = safe_resolve(root, rel_path)
         except PathSecurityError as exc:
-            return {"error": str(exc)}
-        if not resolved.exists() or not resolved.is_file():
-            return {"error": f"{rel_path!r} does not exist or is not a file"}
+            return path_traversal_error(rel_path, str(root), str(exc))
+        if not resolved.exists():
+            return file_not_found_error(rel_path, str(root))
+        if not resolved.is_file():
+            return not_a_file_error(rel_path)
         try:
             markdown = convert_file_to_markdown(resolved)
             return {
@@ -358,23 +396,26 @@ class _ServerState:
                 "length_chars": len(markdown),
             }
         except Exception as exc:
-            return {"error": f"conversion failed: {exc}"}
+            type_info = detect_file_type(resolved)
+            return conversion_error(rel_path, type_info.label, str(exc))
 
     async def download_file_raw(
         self, *, rel_path: str, max_bytes: int | None
     ) -> dict[str, Any]:
         """Download raw file as base64 with MIME type."""
+        root = self.settings.root_dir.resolve()
         try:
-            root = self.settings.root_dir.resolve()
             resolved = safe_resolve(root, rel_path)
         except PathSecurityError as exc:
-            return {"error": str(exc)}
-        if not resolved.exists() or not resolved.is_file():
-            return {"error": f"{rel_path!r} does not exist or is not a file"}
+            return path_traversal_error(rel_path, str(root), str(exc))
+        if not resolved.exists():
+            return file_not_found_error(rel_path, str(root))
+        if not resolved.is_file():
+            return not_a_file_error(rel_path)
         try:
             data = resolved.read_bytes()
         except OSError as exc:
-            return {"error": f"read failed: {exc}"}
+            return file_read_error(rel_path, str(exc))
 
         total_size = len(data)
         truncated = False
@@ -382,15 +423,15 @@ class _ServerState:
             data = data[:max_bytes]
             truncated = True
 
-        mime_type, _ = mimetypes.guess_type(str(resolved))
-        if not mime_type:
-            mime_type = "application/octet-stream"
+        type_info = detect_file_type(resolved)
+        mime_type = type_info.mime_type or "application/octet-stream"
 
         encoded = base64.b64encode(data).decode("ascii")
         return {
             "rel_path": str(resolved.relative_to(root)),
             "abs_path": str(resolved),
             "mime_type": mime_type,
+            "detected_label": type_info.label,
             "total_size_bytes": total_size,
             "returned_size_bytes": len(data),
             "truncated": truncated,
