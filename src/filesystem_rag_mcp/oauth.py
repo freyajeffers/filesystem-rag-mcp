@@ -59,6 +59,9 @@ from mcp.server.auth.provider import (
 from mcp.shared.auth import OAuthMetadata, ProtectedResourceMetadata
 
 from .config import Settings
+from .logging_setup import get_logger
+
+log = get_logger("oauth")
 
 
 # ---------------------------------------------------------------------------
@@ -323,7 +326,38 @@ class MCPFileRAGAuthProvider(
     # ---- Protocol methods ----------------------------------------------
 
     async def get_client(self, client_id: str) -> OAuthClientInformationFull | None:
-        return self.store.get_client(client_id)
+        client = self.store.get_client(client_id)
+        if client is not None:
+            return client
+
+        # MCP 2026-07-28 Spec: Client ID Metadata Documents
+        # If client_id is an HTTPS URL, attempt to resolve the Client ID Metadata Document
+        if client_id.startswith("https://") or client_id.startswith("http://127.0.0.1") or client_id.startswith("http://localhost"):
+            try:
+                import httpx
+
+                async with httpx.AsyncClient(timeout=5.0) as http_client:
+                    resp = await http_client.get(client_id, headers={"Accept": "application/json"})
+                    if resp.status_code == 200:
+                        doc = resp.json()
+                        # Construct client information from remote document
+                        from pydantic import AnyUrl
+
+                        redirects = [AnyUrl(u) for u in doc.get("redirect_uris", [])]
+                        resolved_client = OAuthClientInformationFull(
+                            client_id=client_id,
+                            client_name=doc.get("client_name", client_id),
+                            redirect_uris=redirects,
+                            grant_types=doc.get("grant_types", ["authorization_code"]),
+                            response_types=doc.get("response_types", ["code"]),
+                            scope=doc.get("scope", "fs.rag.read"),
+                        )
+                        # Cache client
+                        self.store.save_client(resolved_client)
+                        return resolved_client
+            except Exception as exc:
+                log.warning("client_metadata_document_fetch_failed", client_id=client_id, error=str(exc))
+        return None
 
     async def register_client(self, client_info: OAuthClientInformationFull) -> None:
         if not self.settings.oauth_allow_dynamic_registration:

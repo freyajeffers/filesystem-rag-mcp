@@ -72,8 +72,20 @@ filesystem-rag-mcp --transport http --no-auth --host 127.0.0.1 --port 8000 --roo
     - `mode` (string, default: "hybrid"): `hybrid`, `fulltext`, or `semantic`.
     - `top_k` (integer, default: 10): Maximum number of search hits.
     - `alpha` (float, default: 0.5): Weighting between full-text (0.0) and vector (1.0).
+    - `path_glob` (string, optional): Glob pattern (e.g. `src/**/*.py`, `docs/*.md`) to filter search hits.
+    - `rerank` (boolean, default: false): Apply neural cross-encoder reranking (FlashRank) over top candidates.
     - `wait_for_indexing` (boolean, default: false): If `false`, immediately executes searches using whatever index is currently available without blocking caller; if `true`, waits for background thorough indexing to complete.
   - Returns ranked search hits with match scores, source indexes, contextual snippets, and an `index_state` object notifying the caller of background indexing progress.
+- `list_directory`:
+  - Sandboxed tree/directory exploration tool.
+  - Parameters:
+    - `rel_path` (string, default: ""): Target folder inside workspace root.
+    - `max_depth` (integer, default: 2): Traversal depth limit.
+    - `pattern` (string, optional): Glob pattern filter for entries.
+    - `include_files` (boolean, default: true): Include file entries.
+    - `include_dirs` (boolean, default: true): Include directory entries.
+    - `limit` (integer, default: 150): Maximum entries returned.
+  - Returns file metadata, sizes, detected MIME/format labels, and convertibility flags.
 - `get_index_status`:
   - Query parameters:
     - `wait` (boolean, default: false): If `true`, synchronously waits for background indexing to finish before returning.

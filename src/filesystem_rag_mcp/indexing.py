@@ -176,8 +176,11 @@ def _split_paragraphs(text: str) -> list[str]:
     return out
 
 
+from .semantic_chunker import semantic_chunk_text
+
+
 def chunk_file(file_meta: FileMeta, settings: Settings) -> list[Chunk]:
-    """Read and convert `file_meta.abs_path` to Markdown, then return its chunks."""
+    """Read and convert `file_meta.abs_path` to Markdown, then return its semantic chunks."""
     try:
         text = convert_file_to_markdown(file_meta.abs_path)
     except Exception:
@@ -185,7 +188,7 @@ def chunk_file(file_meta: FileMeta, settings: Settings) -> list[Chunk]:
             text = file_meta.abs_path.read_text(encoding="utf-8", errors="replace")
         except OSError:
             return []
-    raw_chunks = chunk_text(
+    raw_chunks = semantic_chunk_text(
         text, chunk_size=settings.chunk_size, overlap=settings.chunk_overlap
     )
     out: list[Chunk] = []

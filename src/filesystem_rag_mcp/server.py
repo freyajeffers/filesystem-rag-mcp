@@ -27,6 +27,8 @@ from .indexing import Chunk, chunk_file, discover_files
 from .logging_setup import get_logger
 from .search import SearchEngine, SearchHit
 from .fetcher import fetch_csv_data, fetch_json_data, fetch_lines, fetch_sqlite_query
+from .tree import list_directory
+from .watcher import DirectoryWatcher
 from .converter import convert_file_to_markdown
 from .detector import detect_file_type
 from .errors import (
@@ -115,9 +117,18 @@ def build_server(settings: Settings, *, auth_provider: Any | None = None) -> MCP
         query: str,
         top_k: int | None = None,
         alpha: float | None = None,
+        path_glob: str | None = None,
+        rerank: bool = False,
         wait_for_indexing: bool = False,
     ) -> dict[str, Any]:
-        return await state.search(query=query, top_k=top_k, alpha=alpha, wait_for_indexing=wait_for_indexing)
+        return await state.search(
+            query=query,
+            top_k=top_k,
+            alpha=alpha,
+            path_glob=path_glob,
+            rerank=rerank,
+            wait_for_indexing=wait_for_indexing,
+        )
 
     @server.tool(
         name="get_index_status",
@@ -195,6 +206,31 @@ def build_server(settings: Settings, *, auth_provider: Any | None = None) -> MCP
         max_bytes: int | None = None,
     ) -> dict[str, Any]:
         return await state.download_file_raw(rel_path=rel_path, max_bytes=max_bytes)
+
+    @server.tool(
+        name="list_directory",
+        description=(
+            "Explore the sandboxed filesystem tree. Returns directory/file metadata including "
+            "size, detected MIME/type, conversion support, and relative path. Supports depth and glob filtering."
+        ),
+        annotations=ToolAnnotations(readOnlyHint=True),
+    )
+    async def list_directory_tool(
+        rel_path: str = "",
+        max_depth: int = 2,
+        pattern: str | None = None,
+        include_files: bool = True,
+        include_dirs: bool = True,
+        limit: int = 150,
+    ) -> dict[str, Any]:
+        return state.list_directory(
+            rel_path=rel_path,
+            max_depth=max_depth,
+            pattern=pattern,
+            include_files=include_files,
+            include_dirs=include_dirs,
+            limit=limit,
+        )
 
     @server.tool(
         name="fetch_targeted_data",
@@ -279,6 +315,10 @@ class _ServerState:
         self._index_lock = asyncio.Lock()
         self._quick_index_ready = asyncio.Event()
         self._thorough_index_ready = asyncio.Event()
+        self._watcher = DirectoryWatcher(
+            Path(settings.root_dir).resolve(),
+            self._run_watcher_refresh,
+        )
 
     def start_background_indexing(self) -> None:
         """Trigger fast quick indexing and thorough deep indexing concurrently on server startup."""
@@ -286,9 +326,19 @@ class _ServerState:
             loop = asyncio.get_running_loop()
             self._background_quick_task = loop.create_task(self._run_quick_index())
             self._background_thorough_task = loop.create_task(self._run_thorough_index())
+            self._watcher.start()
         except RuntimeError:
             # If no running event loop yet (e.g. synchronous init), wait for first async call
             pass
+
+    async def _run_watcher_refresh(self) -> None:
+        """Incrementally refresh both indexes after a debounced filesystem change."""
+        log.info("watcher_incremental_refresh_start")
+        async with self._index_lock:
+            await self._refresh_index_internal(full_rebuild=False, vector_index=True)
+        self._quick_index_ready.set()
+        self._thorough_index_ready.set()
+        log.info("watcher_incremental_refresh_complete")
 
     async def _run_quick_index(self) -> None:
         """Runs the quick full-text initial indexing in the background for fast query readiness."""
@@ -350,6 +400,8 @@ class _ServerState:
         query: str,
         top_k: int | None,
         alpha: float | None,
+        path_glob: str | None = None,
+        rerank: bool = False,
         wait_for_indexing: bool = False,
     ) -> dict[str, Any]:
         if not query or not query.strip():
@@ -402,13 +454,21 @@ class _ServerState:
                     "Pass `wait_for_indexing=True` or check `get_index_status` if semantic vector ranking is required."
                 )
 
-            hits = self._engine.search(query, top_k=top_k, alpha=applied_alpha)
+            hits = self._engine.search(
+                query,
+                top_k=top_k,
+                alpha=applied_alpha,
+                path_glob=path_glob,
+                rerank=rerank,
+            )
             return {
                 "success": True,
                 "query": query,
                 "top_k": top_k or self.settings.default_top_k,
                 "alpha": applied_alpha,
                 "requested_alpha": effective_alpha,
+                "path_glob": path_glob,
+                "rerank_requested": rerank,
                 "results": [_hit_to_dict(h, query=query) for h in hits],
                 "index_state": {
                     "indexing_in_progress": bool(is_indexing),
@@ -608,6 +668,34 @@ class _ServerState:
             "truncated": truncated,
             "base64_data": encoded,
         }
+
+    def list_directory(
+        self,
+        *,
+        rel_path: str = "",
+        max_depth: int = 2,
+        pattern: str | None = None,
+        include_files: bool = True,
+        include_dirs: bool = True,
+        limit: int = 150,
+    ) -> dict[str, Any]:
+        if not 0 <= max_depth <= 10:
+            return invalid_parameter_error(
+                "max_depth", max_depth, "max_depth must be between 0 and 10", "Use a depth from 0 to 10."
+            )
+        if not 1 <= limit <= 1000:
+            return invalid_parameter_error(
+                "limit", limit, "limit must be between 1 and 1000", "Use a limit from 1 to 1000."
+            )
+        return list_directory(
+            Path(self.settings.root_dir).resolve(),
+            rel_path,
+            max_depth=max_depth,
+            pattern=pattern,
+            include_files=include_files,
+            include_dirs=include_dirs,
+            limit=limit,
+        )
 
     async def fetch_targeted(
         self,
