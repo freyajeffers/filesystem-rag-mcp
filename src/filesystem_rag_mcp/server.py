@@ -105,7 +105,9 @@ def build_server(settings: Settings, *, auth_provider: Any | None = None) -> MCP
         description=(
             "Hybrid full-text + vector search over the indexed filesystem. "
             "Returns the top-k most relevant chunks with their file path, "
-            "character offset range, and a snippet of text."
+            "character offset range, and a snippet of text. Does NOT block on background indexing "
+            "by default; immediately searches what is currently available and reports index completeness. "
+            "Set `wait_for_indexing=True` to explicitly wait until thorough indexing finishes."
         ),
         annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False),
     )
@@ -113,8 +115,23 @@ def build_server(settings: Settings, *, auth_provider: Any | None = None) -> MCP
         query: str,
         top_k: int | None = None,
         alpha: float | None = None,
+        wait_for_indexing: bool = False,
     ) -> dict[str, Any]:
-        return await state.search(query=query, top_k=top_k, alpha=alpha)
+        return await state.search(query=query, top_k=top_k, alpha=alpha, wait_for_indexing=wait_for_indexing)
+
+    @server.tool(
+        name="get_index_status",
+        description=(
+            "Inspect the live indexing state: background quick/thorough task status, "
+            "indexed text and vector chunk counts, and completion timestamps. "
+            "Set `wait=True` and optional `timeout_seconds` to synchronously await index completion."
+        ),
+    )
+    async def get_index_status_tool(
+        wait: bool = False,
+        timeout_seconds: float = 30.0,
+    ) -> dict[str, Any]:
+        return await state.get_indexing_status(wait=wait, timeout_seconds=timeout_seconds)
 
     @server.tool(
         name="refresh_index",
@@ -328,7 +345,12 @@ class _ServerState:
     # ---- tool handlers -------------------------------------------------
 
     async def search(
-        self, *, query: str, top_k: int | None, alpha: float | None
+        self,
+        *,
+        query: str,
+        top_k: int | None,
+        alpha: float | None,
+        wait_for_indexing: bool = False,
     ) -> dict[str, Any]:
         if not query or not query.strip():
             return invalid_parameter_error(
@@ -352,18 +374,48 @@ class _ServerState:
                 "Specify alpha in range [0.0, 1.0], where 0.0 is pure vector and 1.0 is pure BM25 full-text.",
             )
         try:
-            # If alpha > 0, semantic vector ranking is required -> require thorough index
-            needs_vector = alpha is None or alpha > 0.0
-            await self.ensure_indexed_synchronously(require_thorough=needs_vector)
+            effective_alpha = alpha if alpha is not None else self.settings.hybrid_alpha
+
+            # Check if caller wants to wait for thorough indexing
+            if wait_for_indexing:
+                needs_vector = effective_alpha > 0.0
+                await self.ensure_indexed_synchronously(require_thorough=needs_vector)
+
+            # Do NOT block if wait_for_indexing is False: use what is currently available
+            quick_ready = self._quick_index_ready.is_set()
+            thorough_ready = self._thorough_index_ready.is_set()
+            is_indexing = (self._background_quick_task and not self._background_quick_task.done()) or (
+                self._background_thorough_task and not self._background_thorough_task.done()
+            )
+
             self._ensure()
             assert self._engine is not None
-            hits = self._engine.search(query, top_k=top_k, alpha=alpha)
+
+            # Fallback to pure text search if vector index is still compiling and alpha > 0
+            applied_alpha = effective_alpha
+            indexing_note = None
+            if effective_alpha > 0.0 and not thorough_ready:
+                applied_alpha = 0.0  # Search with available text index immediately
+                indexing_note = (
+                    "Background thorough vector indexing is currently in progress. "
+                    "Results were generated using available full-text indexing without blocking. "
+                    "Pass `wait_for_indexing=True` or check `get_index_status` if semantic vector ranking is required."
+                )
+
+            hits = self._engine.search(query, top_k=top_k, alpha=applied_alpha)
             return {
                 "success": True,
                 "query": query,
                 "top_k": top_k or self.settings.default_top_k,
-                "alpha": alpha if alpha is not None else self.settings.hybrid_alpha,
+                "alpha": applied_alpha,
+                "requested_alpha": effective_alpha,
                 "results": [_hit_to_dict(h, query=query) for h in hits],
+                "index_state": {
+                    "indexing_in_progress": bool(is_indexing),
+                    "quick_index_ready": quick_ready,
+                    "thorough_index_ready": thorough_ready,
+                    "notice": indexing_note,
+                },
             }
         except Exception as exc:
             return search_error(query, "hybrid", str(exc))
@@ -613,6 +665,44 @@ class _ServerState:
 
         # Default fallback for text files: lines
         return fetch_lines(resolved, start_line=1, end_line=row_limit)
+
+    async def get_indexing_status(self, wait: bool = False, timeout_seconds: float = 30.0) -> dict[str, Any]:
+        """Check live background indexing state, with optional caller wait."""
+        if wait:
+            try:
+                await asyncio.wait_for(self._thorough_index_ready.wait(), timeout=timeout_seconds)
+            except asyncio.TimeoutError:
+                pass
+
+        quick_ready = self._quick_index_ready.is_set()
+        thorough_ready = self._thorough_index_ready.is_set()
+        quick_running = bool(self._background_quick_task and not self._background_quick_task.done())
+        thorough_running = bool(self._background_thorough_task and not self._background_thorough_task.done())
+
+        text_count = vector_count = 0
+        try:
+            self._ensure()
+            assert self._ft is not None and self._vec is not None
+            text_count = self._ft.count()
+            vector_count = self._vec.count()
+        except Exception:
+            pass
+
+        return {
+            "root": str(self.settings.root_dir),
+            "indexing_in_progress": quick_running or thorough_running,
+            "quick_index": {
+                "in_progress": quick_running,
+                "ready": quick_ready,
+                "text_chunk_count": text_count,
+            },
+            "thorough_index": {
+                "in_progress": thorough_running,
+                "ready": thorough_ready,
+                "vector_chunk_count": vector_count,
+            },
+            "last_refresh_at": self._last_refresh_at,
+        }
 
     async def status(self) -> dict[str, Any]:
         text_count = vector_count = 0

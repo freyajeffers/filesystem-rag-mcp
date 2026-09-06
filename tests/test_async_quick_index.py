@@ -18,8 +18,13 @@ async def test_async_background_index_and_sync_drain(tmp_path: Path):
     # Trigger background indexing
     state.start_background_indexing()
 
-    # Complex tool requiring index (search) should await background indexing synchronously
-    res = await state.search(query="UniqueAsynchronousKeywordTest2026", top_k=5, alpha=0.5)
+    # Complex tool requiring index (search) with wait_for_indexing=True awaits background indexing
+    res = await state.search(
+        query="UniqueAsynchronousKeywordTest2026",
+        top_k=5,
+        alpha=0.5,
+        wait_for_indexing=True,
+    )
 
     assert res["success"] is True
     assert len(res["results"]) > 0

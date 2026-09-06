@@ -72,7 +72,13 @@ filesystem-rag-mcp --transport http --no-auth --host 127.0.0.1 --port 8000 --roo
     - `mode` (string, default: "hybrid"): `hybrid`, `fulltext`, or `semantic`.
     - `top_k` (integer, default: 10): Maximum number of search hits.
     - `alpha` (float, default: 0.5): Weighting between full-text (0.0) and vector (1.0).
-  - Returns ranked search hits with match scores, source indexes, and **contextual search snippets** windowed around matching terms.
+    - `wait_for_indexing` (boolean, default: false): If `false`, immediately executes searches using whatever index is currently available without blocking caller; if `true`, waits for background thorough indexing to complete.
+  - Returns ranked search hits with match scores, source indexes, contextual snippets, and an `index_state` object notifying the caller of background indexing progress.
+- `get_index_status`:
+  - Query parameters:
+    - `wait` (boolean, default: false): If `true`, synchronously waits for background indexing to finish before returning.
+    - `timeout_seconds` (float, default: 30.0): Maximum duration to wait.
+  - Returns live indexing status, indicating whether quick or thorough indexes are running or ready, plus chunk counts and timestamps.
 - `fetch_targeted_data`:
   - Fine-grained, targeted data extraction from structured and tabular files:
     - **SQLite**: Execute read-only SQL queries via `query` parameter (e.g. `SELECT id, name FROM users WHERE active=1`).

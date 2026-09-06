@@ -26,8 +26,13 @@ async def test_quick_and_thorough_parallel_indexing(tmp_path: Path):
     assert res_ft["success"] is True
     assert len(res_ft["results"]) > 0
 
-    # Complex tool requiring thorough vector index (alpha=0.5) automatically awaits thorough completion
-    res_hybrid = await state.search(query="ThoroughDeepVectorSemanticEmbeddingVerification2026", top_k=5, alpha=0.5)
+    # Complex tool requiring thorough vector index (alpha=0.5) with wait_for_indexing=True awaits thorough completion
+    res_hybrid = await state.search(
+        query="ThoroughDeepVectorSemanticEmbeddingVerification2026",
+        top_k=5,
+        alpha=0.5,
+        wait_for_indexing=True,
+    )
     assert res_hybrid["success"] is True
     assert len(res_hybrid["results"]) > 0
     assert state._thorough_index_ready.is_set()
