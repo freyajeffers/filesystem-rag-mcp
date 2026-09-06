@@ -32,6 +32,8 @@ from .grep import grep_search
 from .graph import CorpusGraphBuilder
 from .git_ops import git_search
 from .orchestrator import ContextOrchestrator
+from .query_cache import QueryCache
+from .symbols import search_symbols
 from .watcher import DirectoryWatcher
 from .converter import convert_file_to_markdown
 from .detector import detect_file_type
@@ -437,6 +439,47 @@ def build_server(settings: Settings, *, auth_provider: Any | None = None) -> MCP
             line_end=line_end,
         )
 
+    @server.tool(
+        name="search_symbols",
+        description=(
+            "Search for function and class declarations/definitions across Python, JS/TS, and generic code. "
+            "Returns symbol names, lines, parameters, and docstrings without full text scanning."
+        ),
+        annotations=ToolAnnotations(readOnlyHint=True),
+    )
+    async def search_symbols_tool(
+        name: str = "",
+        symbol_type: str = "all",
+        path_glob: str | None = None,
+        max_matches: int = 100,
+        sub_dir: str = "",
+        workspace: str = "default",
+    ) -> dict[str, Any]:
+        return state.search_symbols(
+            name=name,
+            symbol_type=symbol_type,
+            path_glob=path_glob,
+            max_matches=max_matches,
+            sub_dir=sub_dir,
+            workspace=workspace,
+        )
+
+    @server.tool(
+        name="add_workspace",
+        description="Register an additional workspace directory for multi-root monorepos or polyrepos.",
+        annotations=ToolAnnotations(readOnlyHint=False),
+    )
+    async def add_workspace_tool(name: str, path: str) -> dict[str, Any]:
+        return state.add_workspace(name=name, path=path)
+
+    @server.tool(
+        name="list_workspaces",
+        description="List all registered workspace roots and their status.",
+        annotations=ToolAnnotations(readOnlyHint=True),
+    )
+    async def list_workspaces_tool() -> dict[str, Any]:
+        return state.list_workspaces()
+
     # Resources — index status and metadata
     @server.resource(
         name="index_status",
@@ -487,6 +530,10 @@ class _ServerState:
         self._index_lock = asyncio.Lock()
         self._quick_index_ready = asyncio.Event()
         self._thorough_index_ready = asyncio.Event()
+        self._query_cache = QueryCache(max_entries=1000, ttl_seconds=300.0)
+        self._workspaces: dict[str, Path] = {
+            "default": Path(settings.root_dir).resolve(),
+        }
         self._watcher = DirectoryWatcher(
             Path(settings.root_dir).resolve(),
             self._run_watcher_refresh,
@@ -637,6 +684,20 @@ class _ServerState:
                     "Pass `wait_for_indexing=True` or check `get_index_status` if semantic vector ranking is required."
                 )
 
+            # Check query cache first if indexing is not active
+            cached = self._query_cache.get(
+                query=query,
+                top_k=top_k,
+                alpha=applied_alpha,
+                path_glob=path_glob,
+                rerank=rerank,
+                fuzzy=fuzzy,
+            )
+            if cached is not None:
+                cached_res = dict(cached)
+                cached_res["cached"] = True
+                return cached_res
+
             hits = self._engine.search(
                 query,
                 top_k=top_k,
@@ -645,9 +706,10 @@ class _ServerState:
                 rerank=rerank,
                 fuzzy=fuzzy,
             )
-            return {
+            response = {
                 "success": True,
                 "query": query,
+                "cached": False,
                 "top_k": top_k or self.settings.default_top_k,
                 "alpha": applied_alpha,
                 "requested_alpha": effective_alpha,
@@ -661,6 +723,16 @@ class _ServerState:
                     "notice": indexing_note,
                 },
             }
+            self._query_cache.set(
+                response,
+                query=query,
+                top_k=top_k,
+                alpha=applied_alpha,
+                path_glob=path_glob,
+                rerank=rerank,
+                fuzzy=fuzzy,
+            )
+            return response
         except Exception as exc:
             return search_error(query, "hybrid", str(exc))
 
@@ -720,6 +792,7 @@ class _ServerState:
                 self._vec.delete_by_chunk_id(stale_id)
 
         self._last_refresh_at = _now()
+        self._query_cache.invalidate()
         log.info(
             "refresh_index_done",
             files=indexed_files,
@@ -1186,6 +1259,64 @@ class _ServerState:
             line_start=line_start,
             line_end=line_end,
         )
+
+    def search_symbols(
+        self,
+        *,
+        name: str = "",
+        symbol_type: str = "all",
+        path_glob: str | None = None,
+        max_matches: int = 100,
+        sub_dir: str = "",
+        workspace: str = "default",
+    ) -> dict[str, Any]:
+        ws_root = self._workspaces.get(workspace)
+        if not ws_root:
+            from .errors import invalid_parameter_error
+            return invalid_parameter_error(
+                "workspace",
+                workspace,
+                f"Workspace '{workspace}' is not registered. Available: {list(self._workspaces.keys())}",
+                "Select a registered workspace from `list_workspaces()` or add one via `add_workspace()`.",
+            )
+        return search_symbols(
+            ws_root,
+            name=name,
+            symbol_type=symbol_type,
+            path_glob=path_glob,
+            max_matches=max_matches,
+            sub_dir=sub_dir,
+        )
+
+    def add_workspace(self, *, name: str, path: str) -> dict[str, Any]:
+        p = Path(path).resolve()
+        if not p.exists() or not p.is_dir():
+            from .errors import path_traversal_error
+            return path_traversal_error(
+                path,
+                "Workspace path does not exist or is not a directory.",
+                "Ensure target workspace path exists and is an accessible directory.",
+            )
+        clean_name = name.strip()
+        if not clean_name:
+            from .errors import invalid_parameter_error
+            return invalid_parameter_error("name", name, "Workspace name cannot be empty.", "Provide a valid name.")
+        self._workspaces[clean_name] = p
+        return {
+            "success": True,
+            "workspace": clean_name,
+            "path": str(p),
+            "all_workspaces": list(self._workspaces.keys()),
+        }
+
+    def list_workspaces(self) -> dict[str, Any]:
+        return {
+            "success": True,
+            "workspaces": {
+                name: {"path": str(path), "exists": path.exists()}
+                for name, path in self._workspaces.items()
+            },
+        }
 
     async def get_indexing_status(self, wait: bool = False, timeout_seconds: float = 30.0) -> dict[str, Any]:
         """Check live background indexing state, with optional caller wait."""

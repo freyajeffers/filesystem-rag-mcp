@@ -93,6 +93,10 @@ filesystem-rag-mcp --transport http --no-auth --host 127.0.0.1 --port 8000 --roo
   - Generates an architectural dependency and reference topology graph identifying system hubs and orphans.
 - `git_search`:
   - Safe local git inspection: commit history, diffs, and line-by-line blame without shell execution.
+- `search_symbols`:
+  - Fast AST/regex extraction of function and class declarations across Python, JS/TS, and generic code.
+- `add_workspace` / `list_workspaces`:
+  - Multi-root and monorepo scoping to register and search across multiple project paths dynamically.
 - `list_directory`:
   - Sandboxed tree/directory exploration tool.
   - Parameters:
