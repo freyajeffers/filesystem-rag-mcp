@@ -29,6 +29,9 @@ from .search import SearchEngine, SearchHit
 from .fetcher import fetch_csv_data, fetch_json_data, fetch_lines, fetch_sqlite_query
 from .tree import list_directory
 from .grep import grep_search
+from .graph import CorpusGraphBuilder
+from .git_ops import git_search
+from .orchestrator import ContextOrchestrator
 from .watcher import DirectoryWatcher
 from .converter import convert_file_to_markdown
 from .detector import detect_file_type
@@ -347,6 +350,91 @@ def build_server(settings: Settings, *, auth_provider: Any | None = None) -> MCP
             chunk_id=chunk_id,
             before_chunks=before_chunks,
             after_chunks=after_chunks,
+        )
+
+    @server.tool(
+        name="deep_search",
+        description=(
+            "Multi-hop search decomposing complex research questions across multiple topics/files. "
+            "Runs parallel subquery searches, clusters findings, and merges deduplicated chunks."
+        ),
+        annotations=ToolAnnotations(readOnlyHint=True),
+    )
+    async def deep_search_tool(
+        query: str,
+        sub_queries: list[str] | None = None,
+        top_k_per_subquery: int = 5,
+        alpha: float = 0.5,
+        rerank: bool = True,
+    ) -> dict[str, Any]:
+        return await state.deep_search(
+            query=query,
+            sub_queries=sub_queries,
+            top_k_per_subquery=top_k_per_subquery,
+            alpha=alpha,
+            rerank=rerank,
+        )
+
+    @server.tool(
+        name="pack_context",
+        description=(
+            "Assemble a clean, token-bounded Markdown prompt context pack from search hits. "
+            "Groups contiguous chunks by file, dedupes, and trims to strict token budgets (e.g. 4000 tokens)."
+        ),
+        annotations=ToolAnnotations(readOnlyHint=True),
+    )
+    async def pack_context_tool(
+        query: str,
+        max_tokens: int = 4000,
+        alpha: float = 0.5,
+        rerank: bool = True,
+        path_glob: str | None = None,
+    ) -> dict[str, Any]:
+        return await state.pack_context(
+            query=query,
+            max_tokens=max_tokens,
+            alpha=alpha,
+            rerank=rerank,
+            path_glob=path_glob,
+        )
+
+    @server.tool(
+        name="get_corpus_graph",
+        description=(
+            "Construct an architectural dependency and reference topology graph of the workspace. "
+            "Detects central architectural hubs (highest in-degree), file dependencies, and orphan files."
+        ),
+        annotations=ToolAnnotations(readOnlyHint=True),
+    )
+    async def get_corpus_graph_tool(
+        sub_dir: str = "",
+        max_files: int = 500,
+    ) -> dict[str, Any]:
+        return state.get_corpus_graph(sub_dir=sub_dir, max_files=max_files)
+
+    @server.tool(
+        name="git_search",
+        description=(
+            "Inspect git commit logs, recent changes, commit diffs, or line blame across repository files. "
+            "Modes: 'commits', 'recent_changes', 'diff', 'blame'."
+        ),
+        annotations=ToolAnnotations(readOnlyHint=True),
+    )
+    async def git_search_tool(
+        mode: str = "commits",
+        query: str | None = None,
+        rel_path: str | None = None,
+        limit: int = 20,
+        line_start: int | None = None,
+        line_end: int | None = None,
+    ) -> dict[str, Any]:
+        return state.git_search(
+            mode=mode,
+            query=query,
+            rel_path=rel_path,
+            limit=limit,
+            line_start=line_start,
+            line_end=line_end,
         )
 
     # Resources — index status and metadata
@@ -1034,6 +1122,70 @@ class _ServerState:
             "after": after,
             "total_file_chunks": len(file_chunks),
         }
+
+    async def deep_search(
+        self,
+        *,
+        query: str,
+        sub_queries: list[str] | None = None,
+        top_k_per_subquery: int = 5,
+        alpha: float = 0.5,
+        rerank: bool = True,
+    ) -> dict[str, Any]:
+        self._ensure()
+        assert self._engine is not None
+        orchestrator = ContextOrchestrator(self._engine)
+        return orchestrator.deep_search(
+            query=query,
+            sub_queries=sub_queries,
+            top_k_per_subquery=top_k_per_subquery,
+            alpha=alpha,
+            rerank=rerank,
+        )
+
+    async def pack_context(
+        self,
+        *,
+        query: str,
+        max_tokens: int = 4000,
+        alpha: float = 0.5,
+        rerank: bool = True,
+        path_glob: str | None = None,
+    ) -> dict[str, Any]:
+        self._ensure()
+        assert self._engine is not None
+        orchestrator = ContextOrchestrator(self._engine)
+        return orchestrator.pack_context(
+            query=query,
+            max_tokens=max_tokens,
+            alpha=alpha,
+            rerank=rerank,
+            path_glob=path_glob,
+        )
+
+    def get_corpus_graph(self, *, sub_dir: str = "", max_files: int = 500) -> dict[str, Any]:
+        builder = CorpusGraphBuilder(self.settings.root_dir)
+        return builder.build_graph(sub_dir=sub_dir, max_files=max_files)
+
+    def git_search(
+        self,
+        *,
+        mode: str = "commits",
+        query: str | None = None,
+        rel_path: str | None = None,
+        limit: int = 20,
+        line_start: int | None = None,
+        line_end: int | None = None,
+    ) -> dict[str, Any]:
+        return git_search(
+            self.settings.root_dir,
+            mode=mode,
+            query=query,
+            rel_path=rel_path,
+            limit=limit,
+            line_start=line_start,
+            line_end=line_end,
+        )
 
     async def get_indexing_status(self, wait: bool = False, timeout_seconds: float = 30.0) -> dict[str, Any]:
         """Check live background indexing state, with optional caller wait."""

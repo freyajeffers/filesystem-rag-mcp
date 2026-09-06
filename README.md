@@ -85,6 +85,14 @@ filesystem-rag-mcp --transport http --no-auth --host 127.0.0.1 --port 8000 --roo
   - Incrementally re-indexes a single file in `<50ms` without global disk traversal.
 - `get_chunk_context`:
   - Retrieves preceding and succeeding chunk neighbors around a given `chunk_id`.
+- `deep_search`:
+  - Multi-hop search decomposing complex queries across topics and sub-queries with deduplicated chunk aggregation.
+- `pack_context`:
+  - Assembles a clean, token-bounded Markdown prompt bundle (e.g. 4000 tokens) with contiguous chunk stitching.
+- `get_corpus_graph`:
+  - Generates an architectural dependency and reference topology graph identifying system hubs and orphans.
+- `git_search`:
+  - Safe local git inspection: commit history, diffs, and line-by-line blame without shell execution.
 - `list_directory`:
   - Sandboxed tree/directory exploration tool.
   - Parameters:
