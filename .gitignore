@@ -1,8 +1,11 @@
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
-.Python
+*.dylib
+
+# C extensions
 build/
 develop-eggs/
 dist/
@@ -21,21 +24,86 @@ share/python-wheels/
 *.egg
 MANIFEST
 
+# Virtual environments
 .env
-.venv
+.env.*
+!.env.example
+!.env.template
+.venv/
 env/
 venv/
 ENV/
 env.bak/
 venv.bak/
+.uv/
 
+# Testing, coverage, and benchmarking
 .pytest_cache/
-.filesystem-rag-mcp/
 .coverage
+.coverage.*
 htmlcov/
-.mypy_cache/
-.ruff_cache/
+.tox/
+.nox/
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
 
+# Linters, typecheckers, and tooling
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.ruff_cache/
+.pytype/
+.pyre/
+
+# Server runtime data & local databases
 .fsrag/
+.filesystem-rag-mcp/
 *.sqlite
 *.sqlite3
+*.sqlite-shm
+*.sqlite-wal
+*.db
+*.db-shm
+*.db-wal
+chroma_db/
+.chroma/
+
+# Logs and runtime artifacts
+*.log
+logs/
+*.pid
+*.seed
+*.pid.lock
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+*/.ipynb_checkpoints/*
+
+# Editor and IDE configurations
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+*~
+*.bak
+
+# Operating System artifacts
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+[Dd]esktop.ini
+
+# Secrets and keys
+*.pem
+*.key
+*.cert
+*.crt
+id_rsa*
