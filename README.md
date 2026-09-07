@@ -66,6 +66,8 @@ filesystem-rag-mcp --transport http --no-auth --host 127.0.0.1 --port 8000 --roo
 
 ## Available MCP Tools
 
+- `ping`:
+  - Rapid health check and liveness probe verifying server connectivity, version, and active workspaces.
 - `search`:
   - Query parameters:
     - `query` (string, required): Natural language search query or keywords.

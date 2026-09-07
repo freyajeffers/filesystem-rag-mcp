@@ -114,6 +114,20 @@ def build_server(settings: Settings, *, auth_provider: Any | None = None) -> MCP
     atexit.register(state.stop)
 
     @server.tool(
+        name="ping",
+        description="Health check and liveness probe verifying server connectivity and runtime readiness.",
+        annotations=ToolAnnotations(readOnlyHint=True),
+    )
+    async def ping_tool() -> dict[str, Any]:
+        return {
+            "success": True,
+            "status": "healthy",
+            "version": "0.1.0",
+            "root_dir": str(settings.root_dir),
+            "workspaces_count": len(state._workspaces),
+        }
+
+    @server.tool(
         name="search",
         description=(
             "Hybrid full-text + vector search over the indexed filesystem. "
