@@ -30,6 +30,7 @@ env.bak/
 venv.bak/
 
 .pytest_cache/
+.filesystem-rag-mcp/
 .coverage
 htmlcov/
 .mypy_cache/

@@ -234,6 +234,7 @@ def build_server(settings: Settings, *, auth_provider: Any | None = None) -> MCP
         include_files: bool = True,
         include_dirs: bool = True,
         limit: int = 150,
+        workspace: str = "default",
     ) -> dict[str, Any]:
         return state.list_directory(
             rel_path=rel_path,
@@ -242,6 +243,7 @@ def build_server(settings: Settings, *, auth_provider: Any | None = None) -> MCP
             include_files=include_files,
             include_dirs=include_dirs,
             limit=limit,
+            workspace=workspace,
         )
 
     @server.tool(
@@ -293,6 +295,7 @@ def build_server(settings: Settings, *, auth_provider: Any | None = None) -> MCP
         case_sensitive: bool = False,
         context_lines: int = 2,
         sub_dir: str = "",
+        workspace: str = "default",
     ) -> dict[str, Any]:
         return state.grep(
             pattern=pattern,
@@ -301,6 +304,7 @@ def build_server(settings: Settings, *, auth_provider: Any | None = None) -> MCP
             case_sensitive=case_sensitive,
             context_lines=context_lines,
             sub_dir=sub_dir,
+            workspace=workspace,
         )
 
     @server.tool(
@@ -948,6 +952,7 @@ class _ServerState:
         include_files: bool = True,
         include_dirs: bool = True,
         limit: int = 150,
+        workspace: str = "default",
     ) -> dict[str, Any]:
         if not 0 <= max_depth <= 10:
             return invalid_parameter_error(
@@ -960,8 +965,16 @@ class _ServerState:
             return invalid_parameter_error(
                 "limit", limit, "limit must be between 1 and 1000", "Use a limit from 1 to 1000."
             )
+        target_root = self._workspaces.get(workspace)
+        if not target_root:
+            return invalid_parameter_error(
+                "workspace",
+                workspace,
+                f"Workspace '{workspace}' is not registered. Available: {list(self._workspaces.keys())}",
+                "Select a registered workspace from `list_workspaces()` or add one via `add_workspace()`.",
+            )
         return list_directory(
-            Path(self.settings.root_dir).resolve(),
+            target_root,
             rel_path,
             max_depth=max_depth,
             pattern=pattern,
@@ -1036,8 +1049,16 @@ class _ServerState:
         case_sensitive: bool = False,
         context_lines: int = 2,
         sub_dir: str = "",
+        workspace: str = "default",
     ) -> dict[str, Any]:
-        root = Path(self.settings.root_dir).resolve()
+        root = self._workspaces.get(workspace)
+        if not root:
+            return invalid_parameter_error(
+                "workspace",
+                workspace,
+                f"Workspace '{workspace}' is not registered. Available: {list(self._workspaces.keys())}",
+                "Select a registered workspace from `list_workspaces()` or add one via `add_workspace()`.",
+            )
         return grep_search(
             root,
             pattern=pattern,
