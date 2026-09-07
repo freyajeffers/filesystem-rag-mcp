@@ -85,6 +85,7 @@ class ContextOrchestrator:
         alpha: float = 0.5,
         rerank: bool = True,
         path_glob: str | None = None,
+        include_line_numbers: bool = False,
     ) -> dict[str, Any]:
         """Pack search hits into a structured, token-bounded Markdown prompt."""
         # Estimate: ~4 characters per token
@@ -119,11 +120,17 @@ class ContextOrchestrator:
             total_chars += len(file_header)
 
             for ch in f_hits:
-                code_fence = f"```\n{ch.text.strip()}\n```\n"
+                text = ch.text.strip()
+                if include_line_numbers:
+                    lines = text.splitlines()
+                    numbered = [f"{i + 1:4d} | {line}" for i, line in enumerate(lines)]
+                    text = "\n".join(numbered)
+
+                code_fence = f"```\n{text}\n```\n"
                 if total_chars + len(code_fence) > char_limit:
                     truncated_length = char_limit - total_chars
                     if truncated_length > 100:
-                        packed_blocks.append(f"```\n{ch.text[:truncated_length]}...\n```\n")
+                        packed_blocks.append(f"```\n{text[:truncated_length]}...\n```\n")
                         used_chunks.append(ch.chunk_id)
                     break
                 packed_blocks.append(code_fence)

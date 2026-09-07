@@ -42,10 +42,11 @@ from .grep import grep_search
 from .indexing import Chunk, chunk_file, discover_files
 from .logging_setup import get_logger
 from .orchestrator import ContextOrchestrator
+from .patcher import patch_file
 from .query_cache import QueryCache
 from .search import SearchEngine, SearchHit
 from .security import PathSecurityError, safe_resolve
-from .symbols import search_symbols
+from .symbols import find_symbol_references, search_symbols
 from .tree import list_directory
 from .vector import Embedder, VectorStore
 from .watcher import DirectoryWatcher
@@ -119,7 +120,8 @@ def build_server(settings: Settings, *, auth_provider: Any | None = None) -> MCP
             "Returns the top-k most relevant chunks with their file path, "
             "character offset range, and a snippet of text. Does NOT block on background indexing "
             "by default; immediately searches what is currently available and reports index completeness. "
-            "Set `wait_for_indexing=True` to explicitly wait until thorough indexing finishes."
+            "Set `wait_for_indexing=True` to explicitly wait until thorough indexing finishes. "
+            "Set `compact=True` to omit large chunk text and preserve context budget."
         ),
         annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False),
     )
@@ -130,6 +132,7 @@ def build_server(settings: Settings, *, auth_provider: Any | None = None) -> MCP
         path_glob: str | None = None,
         rerank: bool = False,
         fuzzy: bool = False,
+        compact: bool = False,
         wait_for_indexing: bool = False,
     ) -> dict[str, Any]:
         return await state.search(
@@ -139,6 +142,7 @@ def build_server(settings: Settings, *, auth_provider: Any | None = None) -> MCP
             path_glob=path_glob,
             rerank=rerank,
             fuzzy=fuzzy,
+            compact=compact,
             wait_for_indexing=wait_for_indexing,
         )
 
@@ -396,6 +400,7 @@ def build_server(settings: Settings, *, auth_provider: Any | None = None) -> MCP
         alpha: float = 0.5,
         rerank: bool = True,
         path_glob: str | None = None,
+        include_line_numbers: bool = False,
     ) -> dict[str, Any]:
         return await state.pack_context(
             query=query,
@@ -403,6 +408,7 @@ def build_server(settings: Settings, *, auth_provider: Any | None = None) -> MCP
             alpha=alpha,
             rerank=rerank,
             path_glob=path_glob,
+            include_line_numbers=include_line_numbers,
         )
 
     @server.tool(
@@ -466,6 +472,54 @@ def build_server(settings: Settings, *, auth_provider: Any | None = None) -> MCP
             path_glob=path_glob,
             max_matches=max_matches,
             sub_dir=sub_dir,
+            workspace=workspace,
+        )
+
+    @server.tool(
+        name="find_symbol_references",
+        description=(
+            "Find call-sites, imports, and usages of a specific symbol across workspace code files. "
+            "Returns occurrences with file paths, line numbers, usage classification ('import' vs 'reference'), and snippets."
+        ),
+        annotations=ToolAnnotations(readOnlyHint=True),
+    )
+    async def find_symbol_references_tool(
+        symbol_name: str,
+        path_glob: str | None = None,
+        max_matches: int = 100,
+        sub_dir: str = "",
+        workspace: str = "default",
+    ) -> dict[str, Any]:
+        return state.find_symbol_references(
+            symbol_name=symbol_name,
+            path_glob=path_glob,
+            max_matches=max_matches,
+            sub_dir=sub_dir,
+            workspace=workspace,
+        )
+
+    @server.tool(
+        name="patch_file",
+        description=(
+            "Atomically patch a sandboxed file in the workspace by replacing an exact substring with new content. "
+            "Automatically triggers immediate incremental re-indexing (<50ms) upon successful edit."
+        ),
+        annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False),
+    )
+    async def patch_file_tool(
+        rel_path: str,
+        old_string: str,
+        new_string: str,
+        replace_all: bool = False,
+        dry_run: bool = False,
+        workspace: str = "default",
+    ) -> dict[str, Any]:
+        return await state.patch_file(
+            rel_path=rel_path,
+            old_string=old_string,
+            new_string=new_string,
+            replace_all=replace_all,
+            dry_run=dry_run,
             workspace=workspace,
         )
 
@@ -642,6 +696,7 @@ class _ServerState:
         path_glob: str | None = None,
         rerank: bool = False,
         fuzzy: bool = False,
+        compact: bool = False,
         wait_for_indexing: bool = False,
     ) -> dict[str, Any]:
         if not query or not query.strip():
@@ -702,6 +757,7 @@ class _ServerState:
                 path_glob=path_glob,
                 rerank=rerank,
                 fuzzy=fuzzy,
+                compact=compact,
             )
             if cached is not None:
                 cached_res = dict(cached)
@@ -716,16 +772,34 @@ class _ServerState:
                 rerank=rerank,
                 fuzzy=fuzzy,
             )
+            raw_results = [_hit_to_dict(h, query=query) for h in hits]
+            if compact:
+                formatted_results = [
+                    {
+                        "chunk_id": r["chunk_id"],
+                        "rel_path": r["rel_path"],
+                        "score": r["score"],
+                        "sources": r["sources"],
+                        "snippet": r.get("snippet", ""),
+                        "start": r["start"],
+                        "end": r["end"],
+                    }
+                    for r in raw_results
+                ]
+            else:
+                formatted_results = raw_results
+
             response = {
                 "success": True,
                 "query": query,
                 "cached": False,
+                "compact": compact,
                 "top_k": top_k or self.settings.default_top_k,
                 "alpha": applied_alpha,
                 "requested_alpha": effective_alpha,
                 "path_glob": path_glob,
                 "rerank_requested": rerank,
-                "results": [_hit_to_dict(h, query=query) for h in hits],
+                "results": formatted_results,
                 "index_state": {
                     "indexing_in_progress": bool(is_indexing),
                     "quick_index_ready": quick_ready,
@@ -741,6 +815,7 @@ class _ServerState:
                 path_glob=path_glob,
                 rerank=rerank,
                 fuzzy=fuzzy,
+                compact=compact,
             )
             return response
         except Exception as exc:
@@ -1250,6 +1325,7 @@ class _ServerState:
         alpha: float = 0.5,
         rerank: bool = True,
         path_glob: str | None = None,
+        include_line_numbers: bool = False,
     ) -> dict[str, Any]:
         self._ensure()
         assert self._engine is not None
@@ -1260,6 +1336,7 @@ class _ServerState:
             alpha=alpha,
             rerank=rerank,
             path_glob=path_glob,
+            include_line_numbers=include_line_numbers,
         )
 
     def get_corpus_graph(self, *, sub_dir: str = "", max_files: int = 500) -> dict[str, Any]:
@@ -1314,6 +1391,68 @@ class _ServerState:
             max_matches=max_matches,
             sub_dir=sub_dir,
         )
+
+    def find_symbol_references(
+        self,
+        *,
+        symbol_name: str,
+        path_glob: str | None = None,
+        max_matches: int = 100,
+        sub_dir: str = "",
+        workspace: str = "default",
+    ) -> dict[str, Any]:
+        ws_root = self._workspaces.get(workspace)
+        if not ws_root:
+            from .errors import invalid_parameter_error
+
+            return invalid_parameter_error(
+                "workspace",
+                workspace,
+                f"Workspace '{workspace}' is not registered. Available: {list(self._workspaces.keys())}",
+                "Select a registered workspace from `list_workspaces()` or add one via `add_workspace()`.",
+            )
+        return find_symbol_references(
+            ws_root,
+            symbol_name=symbol_name,
+            path_glob=path_glob,
+            max_matches=max_matches,
+            sub_dir=sub_dir,
+        )
+
+    async def patch_file(
+        self,
+        *,
+        rel_path: str,
+        old_string: str,
+        new_string: str,
+        replace_all: bool = False,
+        dry_run: bool = False,
+        workspace: str = "default",
+    ) -> dict[str, Any]:
+        ws_root = self._workspaces.get(workspace)
+        if not ws_root:
+            from .errors import invalid_parameter_error
+
+            return invalid_parameter_error(
+                "workspace",
+                workspace,
+                f"Workspace '{workspace}' is not registered. Available: {list(self._workspaces.keys())}",
+                "Select a registered workspace from `list_workspaces()` or add one via `add_workspace()`.",
+            )
+
+        res = patch_file(
+            ws_root,
+            rel_path,
+            old_string,
+            new_string,
+            replace_all=replace_all,
+            dry_run=dry_run,
+        )
+        if res.get("success") and not dry_run:
+            # Trigger immediate incremental reindexing of edited file
+            with contextlib.suppress(Exception):
+                await self.refresh_file(rel_path=rel_path)
+        return res
 
     async def add_workspace(self, *, name: str, path: str) -> dict[str, Any]:
         p = Path(path).resolve()

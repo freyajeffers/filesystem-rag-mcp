@@ -8,7 +8,7 @@ import re
 from pathlib import Path, PurePath
 from typing import Any
 
-from .errors import invalid_parameter_error
+from .errors import file_not_found_error, invalid_parameter_error
 from .security import safe_resolve
 
 
@@ -185,4 +185,103 @@ def search_symbols(
         "symbol_type": symbol_type,
         "total_matches": len(symbols),
         "symbols": symbols,
+    }
+
+
+def find_symbol_references(
+    root: Path,
+    *,
+    symbol_name: str,
+    path_glob: str | None = None,
+    max_matches: int = 100,
+    sub_dir: str = "",
+) -> dict[str, Any]:
+    """Find call-sites and references of a symbol across workspace code files."""
+    if not symbol_name or not symbol_name.strip():
+        return invalid_parameter_error(
+            "symbol_name",
+            symbol_name,
+            "symbol_name cannot be empty",
+            "Provide a symbol name to locate.",
+        )
+
+    target_dir = root / sub_dir if sub_dir else root
+    if not target_dir.exists():
+        return file_not_found_error(sub_dir or ".", str(root))
+
+    # Match symbol bounded by word boundaries
+    pattern = re.compile(rf"\b{re.escape(symbol_name.strip())}\b")
+    references: list[dict[str, Any]] = []
+
+    # Common code file extensions to search
+    code_extensions = {
+        ".py",
+        ".pyi",
+        ".js",
+        ".jsx",
+        ".ts",
+        ".tsx",
+        ".go",
+        ".rs",
+        ".java",
+        ".kt",
+        ".c",
+        ".cpp",
+        ".h",
+        ".hpp",
+        ".rb",
+        ".php",
+    }
+
+    for path in target_dir.rglob("*"):
+        if not path.is_file() or path.suffix.lower() not in code_extensions:
+            continue
+        try:
+            rel_path = str(path.relative_to(root))
+        except ValueError:
+            continue
+
+        if any(
+            part.startswith(".") or part in ("node_modules", "dist", "build", "target")
+            for part in path.parts
+        ):
+            continue
+
+        if path_glob and not (
+            PurePath(rel_path).match(path_glob) or fnmatch.fnmatch(rel_path, path_glob)
+        ):
+            continue
+
+        try:
+            lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except Exception:
+            continue
+
+        for idx, line in enumerate(lines, start=1):
+            if pattern.search(line):
+                # Classify usage line (heuristic: import vs invocation/mention)
+                stripped = line.strip()
+                kind = (
+                    "import"
+                    if stripped.startswith(("import ", "from ", "require("))
+                    else "reference"
+                )
+                references.append(
+                    {
+                        "rel_path": rel_path,
+                        "line": idx,
+                        "kind": kind,
+                        "snippet": stripped[:200],
+                    }
+                )
+                if len(references) >= max_matches:
+                    break
+        if len(references) >= max_matches:
+            break
+
+    return {
+        "success": True,
+        "symbol_name": symbol_name,
+        "total_references": len(references),
+        "references": references,
     }

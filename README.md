@@ -95,6 +95,10 @@ filesystem-rag-mcp --transport http --no-auth --host 127.0.0.1 --port 8000 --roo
   - Safe local git inspection: commit history, diffs, and line-by-line blame without shell execution.
 - `search_symbols`:
   - Fast AST/regex extraction of function and class declarations across Python, JS/TS, and generic code.
+- `find_symbol_references`:
+  - Finds call-sites, imports, and usages of symbols across workspace files with line numbers and snippet context.
+- `patch_file`:
+  - Atomically patches files with exact substring replacement, sandboxed path validation, dry-run support, and immediate $<50\text{ms}$ incremental re-indexing.
 - `add_workspace` / `list_workspaces`:
   - Multi-root and monorepo scoping to register and search across multiple project paths dynamically.
 - `list_directory`:
