@@ -45,7 +45,7 @@ def list_directory(
 
     entries: list[dict[str, Any]] = []
 
-    def _scan(current: Path, depth: int):
+    def _scan(current: Path, depth: int) -> None:
         if depth > max_depth or len(entries) >= limit:
             return
 

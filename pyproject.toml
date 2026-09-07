@@ -14,9 +14,9 @@ classifiers = [
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: System :: Filesystems",
     "Topic :: Text Processing :: Indexing",
@@ -94,7 +94,7 @@ packages = ["src/filesystem_rag_mcp"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM", "RUF"]
@@ -111,10 +111,46 @@ ignore = [
 "scripts/**" = ["S"]
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.12"
 strict = true
 warn_unused_ignores = true
 warn_redundant_casts = true
+
+[[tool.mypy.overrides]]
+module = [
+    "whoosh.*",
+    "flashrank.*",
+    "openpyxl.*",
+    "docx.*",
+    "pptx.*",
+    "striprtf.*",
+    "ebooklib.*",
+    "mutagen.*",
+    "defusedxml.*",
+    "magic.*",
+    "bs4.*",
+    "pathvalidate.*",
+    "nbformat.*",
+    "markitdown.*",
+    "aiofiles.*",
+    "sentence_transformers.*",
+    "chromadb.*",
+    "pymupdf.*",
+    "fitz.*",
+    "authlib.*",
+]
+ignore_missing_imports = true
+disallow_untyped_calls = false
+
+[[tool.mypy.overrides]]
+module = [
+    "mcp.*",
+]
+no_implicit_reexport = false
+
+[[tool.mypy.overrides]]
+module = "filesystem_rag_mcp.converter"
+disallow_untyped_calls = false
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

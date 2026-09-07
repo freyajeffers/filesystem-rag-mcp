@@ -126,7 +126,7 @@ class CorpusGraphBuilder:
                 for f in rel_paths_set
                 if in_degree[f] > 0
             ],
-            key=lambda x: x["imported_by_count"],
+            key=lambda x: in_degree[str(x["file"])],
             reverse=True,
         )
 

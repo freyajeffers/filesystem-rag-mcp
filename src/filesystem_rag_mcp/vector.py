@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
+from typing import Any, cast
 
 from .config import Settings
 from .indexing import Chunk
@@ -70,7 +71,7 @@ class Embedder:
             return [[0.0] * self.settings.embedding_dim for _ in texts]
         # normalize_embeddings=True -> cosine sim via inner product
         vectors = self._model.encode(texts, normalize_embeddings=True, convert_to_numpy=True)
-        return vectors.tolist()
+        return cast(list[list[float]], vectors.tolist())
 
 
 class VectorStore:
@@ -113,14 +114,14 @@ class VectorStore:
         embs = self.embedder.embed(docs)
         # Chroma wants lists, not tuples; the IDs must be unique.
         # We de-duplicate by chunk_id, preferring the latest occurrence.
-        unique: dict[str, tuple[str, str, dict[str, object], list[float]]] = {}
+        unique: dict[str, tuple[str, str, dict[str, Any], list[float]]] = {}
         for cid, doc, meta, emb in zip(ids, docs, metas, embs):
             unique[cid] = (cid, doc, meta, emb)
         self._collection.upsert(
             ids=[v[0] for v in unique.values()],
             documents=[v[1] for v in unique.values()],
-            metadatas=[v[2] for v in unique.values()],
-            embeddings=[v[3] for v in unique.values()],
+            metadatas=cast(Any, [v[2] for v in unique.values()]),
+            embeddings=cast(Any, [v[3] for v in unique.values()]),
         )
 
     def delete_by_rel_path(self, rel_path: str) -> None:
@@ -138,7 +139,7 @@ class VectorStore:
             return []
         emb = self.embedder.embed([query])[0]
         result = self._collection.query(
-            query_embeddings=[emb],
+            query_embeddings=cast(Any, [emb]),
             n_results=top_k,
             include=["documents", "metadatas", "distances"],
         )
@@ -155,13 +156,17 @@ class VectorStore:
             except (TypeError, ValueError):
                 continue
             sim = max(0.0, min(1.0, 1.0 - d))
+            start_val = meta.get("start", 0)
+            end_val = meta.get("end", 0)
+            start_int = int(start_val) if isinstance(start_val, (int, str, float)) else 0
+            end_int = int(end_val) if isinstance(end_val, (int, str, float)) else 0
             out.append(
                 VectorHit(
                     chunk_id=cid,
                     rel_path=str(meta.get("rel_path", "")),
                     file_path=str(meta.get("file_path", "")),
-                    start=int(meta.get("start", 0)),
-                    end=int(meta.get("end", 0)),
+                    start=start_int,
+                    end=end_int,
                     text=str(doc),
                     score=sim,
                 )

@@ -47,14 +47,17 @@ from mcp.server.auth.provider import (
     AuthorizationParams,
     AuthorizeError,
     OAuthAuthorizationServerProvider,
-    OAuthClientInformationFull,
-    OAuthToken,
     RefreshToken,
     RegistrationError,
     construct_redirect_uri,
 )
-from mcp.shared.auth import OAuthMetadata, ProtectedResourceMetadata
-from pydantic import AnyUrl
+from mcp.shared.auth import (
+    OAuthClientInformationFull,
+    OAuthMetadata,
+    OAuthToken,
+    ProtectedResourceMetadata,
+)
+from pydantic import AnyHttpUrl, AnyUrl
 
 from .config import Settings
 from .logging_setup import get_logger
@@ -298,10 +301,10 @@ class MCPFileRAGAuthProvider(
 
     def authorization_server_metadata(self, issuer: str) -> OAuthMetadata:
         return OAuthMetadata(
-            issuer=AnyUrl(issuer),
-            authorization_endpoint=AnyUrl(f"{issuer}/authorize"),
-            token_endpoint=AnyUrl(f"{issuer}/token"),
-            registration_endpoint=AnyUrl(f"{issuer}/register"),
+            issuer=AnyHttpUrl(issuer),
+            authorization_endpoint=AnyHttpUrl(f"{issuer}/authorize"),
+            token_endpoint=AnyHttpUrl(f"{issuer}/token"),
+            registration_endpoint=AnyHttpUrl(f"{issuer}/register"),
             scopes_supported=["fs.rag.read", "fs.rag.admin"],
             response_types_supported=["code"],
             grant_types_supported=["authorization_code", "refresh_token"],
@@ -312,8 +315,8 @@ class MCPFileRAGAuthProvider(
 
     def protected_resource_metadata(self, resource: str) -> ProtectedResourceMetadata:
         return ProtectedResourceMetadata(
-            resource=AnyUrl(resource),
-            authorization_servers=[AnyUrl(self.settings.oauth_issuer)],
+            resource=AnyHttpUrl(resource),
+            authorization_servers=[AnyHttpUrl(self.settings.oauth_issuer)],
             bearer_methods_supported=["header"],
             scopes_supported=["fs.rag.read", "fs.rag.admin"],
         )
@@ -535,7 +538,7 @@ class MCPFileRAGAuthProvider(
                 token=rt.token,
                 client_id=rt.client_id,
                 scopes=rt.scopes,
-                expires_at=rt.expires_at,
+                expires_at=rt.expires_at or (now + self.settings.oauth_refresh_token_ttl_seconds),
                 subject=rt.subject,
                 resource=resource,
             )

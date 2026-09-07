@@ -32,7 +32,7 @@ log = get_logger("converter")
 _markitdown_instance: Any = None
 
 
-def _get_markitdown():
+def _get_markitdown() -> Any:
     global _markitdown_instance
     if _markitdown_instance is None:
         try:

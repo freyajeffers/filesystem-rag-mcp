@@ -16,7 +16,7 @@ log = get_logger("detector")
 _magika_instance: Any = None
 
 
-def _get_magika():
+def _get_magika() -> Any:
     global _magika_instance
     if _magika_instance is None:
         try:

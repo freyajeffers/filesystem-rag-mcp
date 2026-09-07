@@ -9,13 +9,14 @@ should set explicit values for `FS_RAG_INDEX_DIR`, `FS_RAG_DATA_DIR`,
 from __future__ import annotations
 
 import os
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
 
-class Transport(str, Enum):
+class Transport(StrEnum):
     """Transport the server listens on."""
 
     STDIO = "stdio"
@@ -150,18 +151,21 @@ class Settings(BaseModel):
 
     @classmethod
     def from_env(cls, env: dict[str, str] | None = None) -> Settings:
-        """Build a Settings instance from `FS_RAG_*` environment variables.
+        """Build a Settings instance from `FS_RAG_*` or `FSRAG_*` environment variables.
 
         Only variables that are actually set are honored; everything else
         keeps its default. This lets the server run with zero config in dev.
         """
         env = env if env is not None else dict(os.environ)
-        prefix = "FS_RAG_"
-        mapping: dict[str, object] = {}
+        mapping: dict[str, Any] = {}
         for key, value in env.items():
-            if not key.startswith(prefix):
+            short: str | None = None
+            if key.startswith("FS_RAG_"):
+                short = key[7:]
+            elif key.startswith("FSRAG_"):
+                short = key[6:]
+            if short is None:
                 continue
-            short = key[len(prefix) :]
             mapping[_env_key_to_field(short)] = _coerce(short, value)
         return cls(**mapping)
 

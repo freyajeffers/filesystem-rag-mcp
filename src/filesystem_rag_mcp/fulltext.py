@@ -147,7 +147,7 @@ class FullTextStore:
 
     def count(self) -> int:
         with self._ix.searcher() as s:
-            return s.doc_count()
+            return int(s.doc_count())
 
 
 def _normalize_hit(searcher: object, hit: Hit) -> TextHit:

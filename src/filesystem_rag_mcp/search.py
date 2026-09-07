@@ -21,7 +21,7 @@ log = get_logger("search")
 _ranker_instance: Any = None
 
 
-def _get_ranker():
+def _get_ranker() -> Any:
     global _ranker_instance
     if _ranker_instance is None:
         try:
@@ -113,16 +113,16 @@ class SearchEngine:
             )
             sources.setdefault(h.chunk_id, []).append("text")
 
-        for rank, h in enumerate(vec_hits, start=1):
-            scores[h.chunk_id] = scores.get(h.chunk_id, 0.0) + a / (self.RRF_K + rank)
-            meta[h.chunk_id] = _HitMeta(
-                rel_path=h.rel_path,
-                file_path=h.file_path,
-                start=h.start,
-                end=h.end,
-                text=h.text,
+        for rank, vh in enumerate(vec_hits, start=1):
+            scores[vh.chunk_id] = scores.get(vh.chunk_id, 0.0) + a / (self.RRF_K + rank)
+            meta[vh.chunk_id] = _HitMeta(
+                rel_path=vh.rel_path,
+                file_path=vh.file_path,
+                start=vh.start,
+                end=vh.end,
+                text=vh.text,
             )
-            sources.setdefault(h.chunk_id, []).append("vector")
+            sources.setdefault(vh.chunk_id, []).append("vector")
 
         if not scores:
             return []

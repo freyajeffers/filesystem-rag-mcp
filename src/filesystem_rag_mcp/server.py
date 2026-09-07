@@ -116,7 +116,7 @@ def build_server(settings: Settings, *, auth_provider: Any | None = None) -> MCP
     @server.tool(
         name="ping",
         description="Health check and liveness probe verifying server connectivity and runtime readiness.",
-        annotations=ToolAnnotations(readOnlyHint=True),
+        annotations=ToolAnnotations(read_only_hint=True),
     )
     async def ping_tool() -> dict[str, Any]:
         return {
@@ -137,7 +137,7 @@ def build_server(settings: Settings, *, auth_provider: Any | None = None) -> MCP
             "Set `wait_for_indexing=True` to explicitly wait until thorough indexing finishes. "
             "Set `compact=True` to omit large chunk text and preserve context budget."
         ),
-        annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False),
+        annotations=ToolAnnotations(read_only_hint=True, open_world_hint=False),
     )
     async def search_tool(
         query: str,
@@ -181,7 +181,7 @@ def build_server(settings: Settings, *, auth_provider: Any | None = None) -> MCP
             "and (re-)embed + index all chunks. Safe to call repeatedly; "
             "stale chunks are evicted. May be slow on large corpora."
         ),
-        annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False),
+        annotations=ToolAnnotations(read_only_hint=False, destructive_hint=False),
     )
     async def refresh_index_tool(
         full_rebuild: bool = False,
@@ -191,7 +191,7 @@ def build_server(settings: Settings, *, auth_provider: Any | None = None) -> MCP
     @server.tool(
         name="get_chunk",
         description="Fetch a single chunk by its id. Returns the chunk text and metadata.",
-        annotations=ToolAnnotations(readOnlyHint=True),
+        annotations=ToolAnnotations(read_only_hint=True),
     )
     async def get_chunk_tool(chunk_id: str) -> dict[str, Any]:
         return await state.get_chunk(chunk_id)
@@ -202,7 +202,7 @@ def build_server(settings: Settings, *, auth_provider: Any | None = None) -> MCP
             "Read a file's contents from the configured root. The path is "
             "validated against the root; symlinks that escape are refused."
         ),
-        annotations=ToolAnnotations(readOnlyHint=True),
+        annotations=ToolAnnotations(read_only_hint=True),
     )
     async def read_file_tool(
         rel_path: str,
@@ -216,7 +216,7 @@ def build_server(settings: Settings, *, auth_provider: Any | None = None) -> MCP
             "Convert any document (PDF, DOCX, PPTX, XLSX, HTML, IPYNB, CSV, RTF, "
             "JSON, YAML, text, code) to clean Markdown. Validated against root."
         ),
-        annotations=ToolAnnotations(readOnlyHint=True),
+        annotations=ToolAnnotations(read_only_hint=True),
     )
     async def read_file_markdown_tool(
         rel_path: str,
@@ -229,7 +229,7 @@ def build_server(settings: Settings, *, auth_provider: Any | None = None) -> MCP
             "Download/read a raw file as base64-encoded bytes with MIME type. "
             "Suitable for downloading binary files, images, PDFs, etc. Validated against root."
         ),
-        annotations=ToolAnnotations(readOnlyHint=True),
+        annotations=ToolAnnotations(read_only_hint=True),
     )
     async def download_file_raw_tool(
         rel_path: str,
@@ -243,7 +243,7 @@ def build_server(settings: Settings, *, auth_provider: Any | None = None) -> MCP
             "Explore the sandboxed filesystem tree. Returns directory/file metadata including "
             "size, detected MIME/type, conversion support, and relative path. Supports depth and glob filtering."
         ),
-        annotations=ToolAnnotations(readOnlyHint=True),
+        annotations=ToolAnnotations(read_only_hint=True),
     )
     async def list_directory_tool(
         rel_path: str = "",
@@ -304,7 +304,7 @@ def build_server(settings: Settings, *, auth_provider: Any | None = None) -> MCP
             "Returns matching lines with context lines, line numbers, and file paths. "
             "Supports path_glob filtering (e.g. 'src/**/*.py') and case sensitivity."
         ),
-        annotations=ToolAnnotations(readOnlyHint=True),
+        annotations=ToolAnnotations(read_only_hint=True),
     )
     async def grep_search_tool(
         pattern: str,
@@ -332,7 +332,7 @@ def build_server(settings: Settings, *, auth_provider: Any | None = None) -> MCP
             "Returns a mapping of relative paths to contents or structured error objects. "
             "Supports Markdown conversion (`as_markdown=True`) or raw text."
         ),
-        annotations=ToolAnnotations(readOnlyHint=True),
+        annotations=ToolAnnotations(read_only_hint=True),
     )
     async def read_files_batch_tool(
         rel_paths: list[str],
@@ -351,7 +351,7 @@ def build_server(settings: Settings, *, auth_provider: Any | None = None) -> MCP
             "Incrementally (re-)chunk and re-index a single specific file into full-text and vector stores "
             "in <50ms without walking the rest of the workspace."
         ),
-        annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False),
+        annotations=ToolAnnotations(read_only_hint=False, destructive_hint=False),
     )
     async def refresh_file_tool(
         rel_path: str,
@@ -364,7 +364,7 @@ def build_server(settings: Settings, *, auth_provider: Any | None = None) -> MCP
             "Fetch contextual neighbor chunks surrounding a chunk_id from the same file. "
             "Expands awareness of the document before and after a search hit."
         ),
-        annotations=ToolAnnotations(readOnlyHint=True),
+        annotations=ToolAnnotations(read_only_hint=True),
     )
     async def get_chunk_context_tool(
         chunk_id: str,
@@ -383,7 +383,7 @@ def build_server(settings: Settings, *, auth_provider: Any | None = None) -> MCP
             "Multi-hop search decomposing complex research questions across multiple topics/files. "
             "Runs parallel subquery searches, clusters findings, and merges deduplicated chunks."
         ),
-        annotations=ToolAnnotations(readOnlyHint=True),
+        annotations=ToolAnnotations(read_only_hint=True),
     )
     async def deep_search_tool(
         query: str,
@@ -406,7 +406,7 @@ def build_server(settings: Settings, *, auth_provider: Any | None = None) -> MCP
             "Assemble a clean, token-bounded Markdown prompt context pack from search hits. "
             "Groups contiguous chunks by file, dedupes, and trims to strict token budgets (e.g. 4000 tokens)."
         ),
-        annotations=ToolAnnotations(readOnlyHint=True),
+        annotations=ToolAnnotations(read_only_hint=True),
     )
     async def pack_context_tool(
         query: str,
@@ -431,7 +431,7 @@ def build_server(settings: Settings, *, auth_provider: Any | None = None) -> MCP
             "Construct an architectural dependency and reference topology graph of the workspace. "
             "Detects central architectural hubs (highest in-degree), file dependencies, and orphan files."
         ),
-        annotations=ToolAnnotations(readOnlyHint=True),
+        annotations=ToolAnnotations(read_only_hint=True),
     )
     async def get_corpus_graph_tool(
         sub_dir: str = "",
@@ -445,7 +445,7 @@ def build_server(settings: Settings, *, auth_provider: Any | None = None) -> MCP
             "Inspect git commit logs, recent changes, commit diffs, or line blame across repository files. "
             "Modes: 'commits', 'recent_changes', 'diff', 'blame'."
         ),
-        annotations=ToolAnnotations(readOnlyHint=True),
+        annotations=ToolAnnotations(read_only_hint=True),
     )
     async def git_search_tool(
         mode: str = "commits",
@@ -470,7 +470,7 @@ def build_server(settings: Settings, *, auth_provider: Any | None = None) -> MCP
             "Search for function and class declarations/definitions across Python, JS/TS, and generic code. "
             "Returns symbol names, lines, parameters, and docstrings without full text scanning."
         ),
-        annotations=ToolAnnotations(readOnlyHint=True),
+        annotations=ToolAnnotations(read_only_hint=True),
     )
     async def search_symbols_tool(
         name: str = "",
@@ -495,7 +495,7 @@ def build_server(settings: Settings, *, auth_provider: Any | None = None) -> MCP
             "Find call-sites, imports, and usages of a specific symbol across workspace code files. "
             "Returns occurrences with file paths, line numbers, usage classification ('import' vs 'reference'), and snippets."
         ),
-        annotations=ToolAnnotations(readOnlyHint=True),
+        annotations=ToolAnnotations(read_only_hint=True),
     )
     async def find_symbol_references_tool(
         symbol_name: str,
@@ -518,7 +518,7 @@ def build_server(settings: Settings, *, auth_provider: Any | None = None) -> MCP
             "Atomically patch a sandboxed file in the workspace by replacing an exact substring with new content. "
             "Automatically triggers immediate incremental re-indexing (<50ms) upon successful edit."
         ),
-        annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False),
+        annotations=ToolAnnotations(read_only_hint=False, destructive_hint=False),
     )
     async def patch_file_tool(
         rel_path: str,
@@ -540,7 +540,7 @@ def build_server(settings: Settings, *, auth_provider: Any | None = None) -> MCP
     @server.tool(
         name="add_workspace",
         description="Register an additional workspace directory for multi-root monorepos or polyrepos.",
-        annotations=ToolAnnotations(readOnlyHint=False),
+        annotations=ToolAnnotations(read_only_hint=False),
     )
     async def add_workspace_tool(name: str, path: str) -> dict[str, Any]:
         return await state.add_workspace(name=name, path=path)
@@ -548,7 +548,7 @@ def build_server(settings: Settings, *, auth_provider: Any | None = None) -> MCP
     @server.tool(
         name="list_workspaces",
         description="List all registered workspace roots and their status.",
-        annotations=ToolAnnotations(readOnlyHint=True),
+        annotations=ToolAnnotations(read_only_hint=True),
     )
     async def list_workspaces_tool() -> dict[str, Any]:
         return state.list_workspaces()
@@ -927,14 +927,16 @@ class _ServerState:
         # Fallback: vector store via document lookup
         assert self._vec is not None
         result = self._vec._collection.get(ids=[chunk_id], include=["documents", "metadatas"])
-        if result["ids"]:
+        if result["ids"] and result["metadatas"] and result["documents"]:
             meta = result["metadatas"][0] or {}
+            start_val = meta.get("start", 0)
+            end_val = meta.get("end", 0)
             return {
                 "chunk_id": chunk_id,
                 "rel_path": str(meta.get("rel_path", "")),
                 "file_path": str(meta.get("file_path", "")),
-                "start": int(meta.get("start", 0)),
-                "end": int(meta.get("end", 0)),
+                "start": int(start_val) if isinstance(start_val, (int, str, float)) else 0,
+                "end": int(end_val) if isinstance(end_val, (int, str, float)) else 0,
                 "text": str(result["documents"][0]) if result["documents"] else "",
             }
         return chunk_not_found_error(chunk_id)

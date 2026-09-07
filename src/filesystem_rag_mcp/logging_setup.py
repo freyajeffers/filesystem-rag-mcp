@@ -40,4 +40,6 @@ def configure_logging(level: str = "INFO") -> None:
 
 def get_logger(name: str | None = None) -> structlog.stdlib.BoundLogger:
     """Return a configured logger."""
-    return structlog.get_logger(name)
+    from typing import cast
+
+    return cast(structlog.stdlib.BoundLogger, structlog.get_logger(name))
