@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import os
 import sys
 from pathlib import Path
@@ -101,6 +102,21 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Disable outbound HF network calls; degrade gracefully if weights are missing",
     )
     parser.add_argument(
+        "--oauth-issuer",
+        default=os.environ.get("FSRAG_OAUTH_ISSUER", None),
+        help="Custom public OAuth issuer URL (e.g., https://files.mcp.freyajeffers.rocks)",
+    )
+    parser.add_argument(
+        "--create-client",
+        metavar="CLIENT_NAME",
+        help="Pre-generate an OAuth client (client_id + client_secret), persist to database, print credentials, and exit",
+    )
+    parser.add_argument(
+        "--list-clients",
+        action="store_true",
+        help="List all pre-generated / registered OAuth clients and exit",
+    )
+    parser.add_argument(
         "--config-snippet",
         choices=["claude", "zed", "hermes", "all"],
         help="Print ready-to-paste MCP client configuration JSON and exit",
@@ -121,6 +137,54 @@ def main(argv: list[str] | None = None) -> None:
         )
         sys.exit(print_doctor_report(settings, as_json=args.json))
 
+    if args.create_client:
+        from .oauth import MCPFileRAGAuthProvider
+
+        settings = Settings(
+            root_dir=args.root_dir.resolve(),
+            data_dir=args.data_dir.resolve(),
+        )
+        provider = MCPFileRAGAuthProvider(settings)
+        client = provider.create_pregenerated_client(client_name=args.create_client)
+        print(
+            json.dumps(
+                {
+                    "client_id": client.client_id,
+                    "client_secret": client.client_secret,
+                    "client_name": client.client_name,
+                    "scope": client.scope,
+                    "redirect_uris": [str(u) for u in (client.redirect_uris or [])],
+                },
+                indent=2,
+            )
+        )
+        return
+
+    if args.list_clients:
+        from .oauth import MCPFileRAGAuthProvider
+
+        settings = Settings(
+            root_dir=args.root_dir.resolve(),
+            data_dir=args.data_dir.resolve(),
+        )
+        provider = MCPFileRAGAuthProvider(settings)
+        clients = provider.store.list_clients()
+        print(
+            json.dumps(
+                [
+                    {
+                        "client_id": c.client_id,
+                        "client_name": c.client_name,
+                        "scope": c.scope,
+                        "redirect_uris": [str(u) for u in (c.redirect_uris or [])],
+                    }
+                    for c in clients
+                ],
+                indent=2,
+            )
+        )
+        return
+
     if args.config_snippet:
         _print_config_snippet(args.config_snippet, args)
         return
@@ -134,13 +198,15 @@ def main(argv: list[str] | None = None) -> None:
     auth_required = not args.no_auth and transport_choice != "stdio"
     allow_dcr = not args.no_dcr
 
+    issuer_url = args.oauth_issuer or f"http://{args.host}:{args.port}"
+
     settings = Settings(
         root_dir=args.root_dir.resolve(),
         data_dir=args.data_dir.resolve(),
         embedding_model=args.embedding_model,
         auth_required=auth_required,
         oauth_allow_dynamic_registration=allow_dcr,
-        oauth_issuer=f"http://{args.host}:{args.port}",
+        oauth_issuer=issuer_url,
         offline_mode=args.offline,
     )
 

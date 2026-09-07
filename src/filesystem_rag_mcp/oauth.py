@@ -154,6 +154,11 @@ class _OAuthStore:
             return None
         return OAuthClientInformationFull.model_validate(json.loads(row["payload"]))
 
+    def list_clients(self) -> list[OAuthClientInformationFull]:
+        with self._lock, self._connect() as conn:
+            rows = conn.execute("SELECT payload FROM clients").fetchall()
+        return [OAuthClientInformationFull.model_validate(json.loads(r["payload"])) for r in rows]
+
     # ---- auth codes -----------------------------------------------------
 
     def save_code(self, code: StoredAuthCode) -> None:
@@ -499,6 +504,30 @@ class MCPFileRAGAuthProvider(
     async def revoke_token(self, token: AccessToken | RefreshToken) -> None:
         if isinstance(token, RefreshToken):
             self.store.revoke_refresh(token.token)
+
+    def create_pregenerated_client(
+        self,
+        *,
+        client_name: str = "Pre-generated Client",
+        redirect_uris: list[str] | None = None,
+        client_id: str | None = None,
+        client_secret: str | None = None,
+        scopes: list[str] | None = None,
+    ) -> OAuthClientInformationFull:
+        """Create and store a pregenerated OAuth client for direct client credentials or testing."""
+        cid = client_id or _new_client_id()
+        csec = client_secret or secrets.token_urlsafe(32)
+        ruris = [AnyUrl(u) for u in (redirect_uris or ["http://127.0.0.1/callback"])]
+        client_info = OAuthClientInformationFull(
+            client_id=cid,
+            client_secret=csec,
+            client_name=client_name,
+            redirect_uris=ruris,
+            scope=" ".join(scopes or ["fs.rag.read", "fs.rag.admin"]),
+            client_id_issued_at=int(time.time()),
+        )
+        self.store.save_client(client_info)
+        return client_info
 
     # ---- helpers --------------------------------------------------------
 
