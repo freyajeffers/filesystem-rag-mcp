@@ -691,8 +691,8 @@ class _ServerState:
         self,
         *,
         query: str,
-        top_k: int | None,
-        alpha: float | None,
+        top_k: int | None = None,
+        alpha: float | None = None,
         path_glob: str | None = None,
         rerank: bool = False,
         fuzzy: bool = False,
@@ -1306,16 +1306,33 @@ class _ServerState:
         alpha: float = 0.5,
         rerank: bool = True,
     ) -> dict[str, Any]:
-        self._ensure()
-        assert self._engine is not None
-        orchestrator = ContextOrchestrator(self._engine)
-        return orchestrator.deep_search(
-            query=query,
-            sub_queries=sub_queries,
-            top_k_per_subquery=top_k_per_subquery,
-            alpha=alpha,
-            rerank=rerank,
-        )
+        if not query or not query.strip():
+            return invalid_parameter_error(
+                "query",
+                query,
+                "Query string cannot be empty",
+                "Provide a non-empty search query.",
+            )
+        if not 1 <= top_k_per_subquery <= 100:
+            return invalid_parameter_error(
+                "top_k_per_subquery",
+                top_k_per_subquery,
+                "top_k_per_subquery must be between 1 and 100",
+                "Provide an integer from 1 to 100.",
+            )
+        try:
+            self._ensure()
+            assert self._engine is not None
+            orchestrator = ContextOrchestrator(self._engine)
+            return orchestrator.deep_search(
+                query=query,
+                sub_queries=sub_queries,
+                top_k_per_subquery=top_k_per_subquery,
+                alpha=alpha,
+                rerank=rerank,
+            )
+        except Exception as exc:
+            return search_error(query, "deep_search", str(exc))
 
     async def pack_context(
         self,
@@ -1327,21 +1344,48 @@ class _ServerState:
         path_glob: str | None = None,
         include_line_numbers: bool = False,
     ) -> dict[str, Any]:
-        self._ensure()
-        assert self._engine is not None
-        orchestrator = ContextOrchestrator(self._engine)
-        return orchestrator.pack_context(
-            query=query,
-            max_tokens=max_tokens,
-            alpha=alpha,
-            rerank=rerank,
-            path_glob=path_glob,
-            include_line_numbers=include_line_numbers,
-        )
+        if not query or not query.strip():
+            return invalid_parameter_error(
+                "query",
+                query,
+                "Query string cannot be empty",
+                "Provide a non-empty query string.",
+            )
+        if not 50 <= max_tokens <= 128000:
+            return invalid_parameter_error(
+                "max_tokens",
+                max_tokens,
+                "max_tokens must be between 50 and 128000",
+                "Provide a token limit between 50 and 128000.",
+            )
+        try:
+            self._ensure()
+            assert self._engine is not None
+            orchestrator = ContextOrchestrator(self._engine)
+            return orchestrator.pack_context(
+                query=query,
+                max_tokens=max_tokens,
+                alpha=alpha,
+                rerank=rerank,
+                path_glob=path_glob,
+                include_line_numbers=include_line_numbers,
+            )
+        except Exception as exc:
+            return search_error(query, "pack_context", str(exc))
 
     def get_corpus_graph(self, *, sub_dir: str = "", max_files: int = 500) -> dict[str, Any]:
-        builder = CorpusGraphBuilder(self.settings.root_dir)
-        return builder.build_graph(sub_dir=sub_dir, max_files=max_files)
+        if not 1 <= max_files <= 5000:
+            return invalid_parameter_error(
+                "max_files",
+                max_files,
+                "max_files must be between 1 and 5000",
+                "Provide an integer limit up to 5000.",
+            )
+        try:
+            builder = CorpusGraphBuilder(self.settings.root_dir)
+            return builder.build_graph(sub_dir=sub_dir, max_files=max_files)
+        except Exception as exc:
+            return search_error(sub_dir or ".", "corpus_graph", str(exc))
 
     def git_search(
         self,

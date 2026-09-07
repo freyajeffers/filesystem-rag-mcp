@@ -6,7 +6,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from .errors import invalid_parameter_error
+from .errors import git_error, invalid_parameter_error
 from .security import safe_resolve
 
 
@@ -23,11 +23,11 @@ def git_search(
     """Inspect local git repository history without network calls."""
     git_dir = root / ".git"
     if not git_dir.exists():
-        return {
-            "success": False,
-            "error": "NOT_A_GIT_REPOSITORY",
-            "message": f"Path '{root}' does not contain a .git directory.",
-        }
+        return git_error(
+            "git",
+            f"Path '{root}' does not contain a .git directory.",
+            "Initialize git ('git init') or point root_dir to an existing git repository.",
+        )
 
     valid_modes = {"commits", "diff", "blame", "recent_changes"}
     if mode not in valid_modes:
@@ -75,7 +75,7 @@ def git_search(
                 "commits": entries,
             }
         except subprocess.SubprocessError as exc:
-            return {"success": False, "error": str(exc)}
+            return git_error("git log", str(exc), "Verify commit query and path arguments.")
 
     elif mode == "diff":
         # Show commit diff or working tree diff
@@ -99,7 +99,7 @@ def git_search(
                 "truncated": len(res.stdout) > 50000,
             }
         except subprocess.SubprocessError as exc:
-            return {"success": False, "error": str(exc)}
+            return git_error("git diff", str(exc), "Verify commit target or diff arguments.")
 
     elif mode == "blame":
         if not resolved_path or not resolved_path.exists():
@@ -145,6 +145,11 @@ def git_search(
                 "blame": blame_lines[:limit],
             }
         except subprocess.SubprocessError as exc:
-            return {"success": False, "error": str(exc)}
+            return git_error("git blame", str(exc), "Verify line range or file git history.")
 
-    return {"success": False, "error": f"Unsupported mode: {mode}"}
+    return invalid_parameter_error(
+        "mode",
+        mode,
+        f"Unsupported mode: {mode}",
+        "Select mode='commits', 'recent_changes', 'diff', or 'blame'.",
+    )

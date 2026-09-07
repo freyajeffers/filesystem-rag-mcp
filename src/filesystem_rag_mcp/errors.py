@@ -96,6 +96,15 @@ def search_error(query: str, mode: str, reason: str) -> dict[str, Any]:
     ).to_dict()
 
 
+def git_error(command: str, reason: str, suggested_fix: str | None = None) -> dict[str, Any]:
+    return AgentError(
+        code="GIT_OPERATION_FAILED",
+        message=f"Git command failed: {reason}",
+        suggested_fix=suggested_fix or "Verify repository status and parameters.",
+        details={"command": command, "reason": reason},
+    ).to_dict()
+
+
 def invalid_parameter_error(
     param: str, value: Any, constraint: str, suggested_fix: str
 ) -> dict[str, Any]:
