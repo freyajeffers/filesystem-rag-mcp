@@ -69,3 +69,18 @@ def test_offline_mode_embedder(tmp_path: Path):
 def test_config_snippet_cli():
     args = parse_args(["--config-snippet", "all", "--root-dir", "/tmp/test"])
     assert args.config_snippet == "all"
+
+
+def test_doctor_diagnostics(tmp_path: Path):
+    from filesystem_rag_mcp.doctor import print_doctor_report, run_diagnostics
+
+    settings = Settings(
+        root_dir=tmp_path,
+        data_dir=tmp_path / ".fsrag",
+    )
+    all_passed, checks = run_diagnostics(settings)
+    assert all_passed is True
+    assert len(checks) > 0
+
+    code = print_doctor_report(settings, as_json=True)
+    assert code == 0

@@ -13,6 +13,7 @@ import os
 import sys
 from pathlib import Path
 
+from . import __version__
 from .config import Settings
 from .logging_setup import configure_logging, get_logger
 from .server import build_server
@@ -24,6 +25,22 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="filesystem-rag-mcp",
         description="Local filesystem RAG MCP server (vector + full-text search, OAuth 2.1)",
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {__version__}",
+        help="Show program's version number and exit",
+    )
+    parser.add_argument(
+        "--doctor",
+        action="store_true",
+        help="Run environment, dependency, and health diagnostics and exit",
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Output diagnostics in structured JSON format (used with --doctor)",
     )
     parser.add_argument(
         "--transport",
@@ -93,6 +110,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
+
+    if args.doctor:
+        from .doctor import print_doctor_report
+
+        settings = Settings(
+            root_dir=args.root_dir.resolve(),
+            data_dir=args.data_dir.resolve(),
+            embedding_model=args.embedding_model,
+        )
+        sys.exit(print_doctor_report(settings, as_json=args.json))
 
     if args.config_snippet:
         _print_config_snippet(args.config_snippet, args)
