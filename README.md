@@ -151,6 +151,18 @@ filesystem-rag-mcp --config-snippet zed
 filesystem-rag-mcp --config-snippet hermes
 ```
 
+### System Diagnostics (`--doctor`)
+
+Run immediate environment and health verification to check Python version, directories, core dependencies, optional document converters, and system tools:
+
+```bash
+# Interactive diagnostic output with checkmarks and suggestions
+filesystem-rag-mcp --doctor
+
+# Machine-readable JSON output for automated health probes
+filesystem-rag-mcp --doctor --json
+```
+
 ### Operational & Performance Guards
 
 - **Offline / Air-Gapped Mode**: Use `--offline` / `FSRAG_OFFLINE_MODE=1` to disable outbound HuggingFace network requests and operate strictly on cached weights.
@@ -158,11 +170,19 @@ filesystem-rag-mcp --config-snippet hermes
 - **Vector Binary Exclusion**: By default, raw binary files falling back to hexdumps are indexed in BM25 full-text search but excluded from dense vector embeddings (`index_binary_vectors=False`) to avoid noise in vector similarity space.
 - **Graceful Shutdown**: Process termination cleanups are registered with `atexit` to flush persistent indexes and release file watcher threads cleanly.
 
-## Testing
+## Developer Workflow
 
-Run tests with `pytest`:
+Use the provided `Makefile` for standardized development, testing, and linting tasks:
+
 ```bash
-pytest
+make help        # Show all available development commands
+make install     # Set up virtual environment and install in editable mode
+make lint        # Run ruff lint checks
+make format      # Format codebase with ruff
+make typecheck   # Strict static type analysis with mypy
+make test        # Run pytest test suite
+make ci          # Run full local CI gate (format, lint, mypy, pytest)
+make doctor      # Run environment diagnostic checks
 ```
 
 ## License
