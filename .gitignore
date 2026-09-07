@@ -27,6 +27,7 @@ MANIFEST
 # Virtual environments
 .env
 .env.*
+mcp_client_credentials.env
 !.env.example
 !.env.template
 .venv/
