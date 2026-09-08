@@ -14,8 +14,9 @@ with cosine-similarity vector scores (which live in [-1, 1], typically
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import dataclass
+from typing import ClassVar
 
+from pydantic import BaseModel, ConfigDict, Field
 from whoosh import index
 from whoosh.analysis import StemmingAnalyzer
 from whoosh.fields import ID, NUMERIC, TEXT, Schema
@@ -36,15 +37,24 @@ SCHEMA = Schema(
 )
 
 
-@dataclass(slots=True, frozen=True)
-class TextHit:
-    chunk_id: str
-    rel_path: str
-    file_path: str
-    start: int
-    end: int
-    text: str
-    score: float  # normalized to [0, 1]
+class TextHit(BaseModel):
+    """A single full-text search result.
+
+    Structurally identical to `vector.VectorHit` so the search engine can
+    merge them without conversion. Pydantic gives us free `model_dump()`
+    for the merged `SearchHit` JSON payload and field-level schema
+    generation for MCP tool descriptors.
+    """
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
+
+    chunk_id: str = Field(description="Stable content-derived chunk identifier")
+    rel_path: str = Field(description="Path relative to the indexed root")
+    file_path: str = Field(description="Absolute filesystem path")
+    start: int = Field(description="Char offset where the chunk begins in the source file")
+    end: int = Field(description="Char offset one past the chunk's last char")
+    text: str = Field(description="Chunk text matched by the query")
+    score: float = Field(description="Normalized score in [0, 1]")
 
 
 class FullTextStore:
