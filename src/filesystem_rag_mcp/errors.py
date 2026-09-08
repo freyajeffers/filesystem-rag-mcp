@@ -10,26 +10,43 @@ force agents to guess what happened. This module standardizes errors with:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any
+from typing import Any, ClassVar
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
-@dataclass(slots=True, frozen=True)
-class AgentError:
-    code: str
-    message: str
-    suggested_fix: str
-    details: dict[str, Any]
+class AgentError(BaseModel):
+    """Structured error envelope returned by every MCP tool on failure.
+
+    The model is frozen so error envelopes are immutable once constructed
+    (matching the previous `@dataclass(slots=True, frozen=True)` semantics).
+    `model_dump()` replaces the old `to_dict()` helper.
+    """
+
+    # Pydantic's `model_config` is class-level; declare it via ClassVar so
+    # strict static type checkers (mypy, pyright) don't flag the override.
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
+
+    code: str = Field(
+        description="Machine-parseable snake_case error code (e.g., 'PATH_TRAVERSAL_BLOCKED')"
+    )
+    message: str = Field(description="Concise human/agent explanation")
+    suggested_fix: str = Field(description="Actionable remedy the agent can take immediately")
+    details: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Structured context: paths, allowed roots, detected types, etc.",
+    )
 
     def to_dict(self) -> dict[str, Any]:
+        """Backward-compatible alias for the previous dataclass API.
+
+        New code should prefer the Pydantic-native `model_dump()`. This shim
+        is kept so existing call sites in server.py and friends continue to
+        work without churn and the public error contract is preserved.
+        """
         return {
             "success": False,
-            "error": {
-                "code": self.code,
-                "message": self.message,
-                "suggested_fix": self.suggested_fix,
-                "details": self.details,
-            },
+            "error": self.model_dump(),
         }
 
 
