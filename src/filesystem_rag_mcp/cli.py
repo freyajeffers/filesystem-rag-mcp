@@ -31,7 +31,7 @@ log = get_logger(__name__)
 # Subcommand dispatch
 # ---------------------------------------------------------------------------
 
-_SUBCOMMANDS = ("doctor", "search", "stats")
+_SUBCOMMANDS = ("doctor", "search", "stats", "index")
 
 
 def _argv_uses_subcommand(argv: list[str]) -> str | None:
@@ -107,6 +107,24 @@ def _build_subcommand_parser(prog: str) -> argparse.ArgumentParser:
     p_stats.add_argument(
         "--data-dir", type=Path, default=Path(os.environ.get("FSRAG_DATA_DIR", ".fsrag"))
     )
+
+    # index ----------------------------------------------------------------
+    p_index = sub_p.add_parser(
+        "index",
+        help="Build (or refresh) the on-disk full-text and vector indexes synchronously",
+    )
+    p_index.add_argument(
+        "--thorough",
+        action="store_true",
+        help="Run the thorough pass (includes vector embeddings); default is the quick BM25 pass",
+    )
+    p_index.add_argument(
+        "--root-dir", type=Path, default=Path(os.environ.get("FSRAG_ROOT_DIR", "."))
+    )
+    p_index.add_argument(
+        "--data-dir", type=Path, default=Path(os.environ.get("FSRAG_DATA_DIR", ".fsrag"))
+    )
+    p_index.add_argument("--json", action="store_true", dest="as_json")
 
     return parser
 
@@ -221,6 +239,82 @@ def _run_stats(args: argparse.Namespace) -> int:
         print("=" * 60)
 
     return 0
+
+
+def _run_index_async(args: argparse.Namespace) -> int:
+    """Run a synchronous indexing pass using the shared `indexing.reindex` helper.
+
+    The `index` subcommand is intentionally blocking and side-effecting: it
+    populates the on-disk full-text and vector indexes that subsequent
+    `search` invocations will read from. We do *not* go through the server's
+    `_ServerState` (which is private) — instead we construct the same
+    storage primitives the server uses and call the shared helper.
+    """
+    from .detector import detect_file_type
+    from .fulltext import FullTextStore
+    from .indexing import reindex as _reindex
+    from .vector import Embedder, VectorStore
+
+    settings = Settings(
+        root_dir=args.root_dir.resolve(),
+        data_dir=args.data_dir.resolve(),
+    )
+
+    settings.root_dir.mkdir(parents=True, exist_ok=True)
+    settings.data_dir.mkdir(parents=True, exist_ok=True)
+
+    thorough = bool(getattr(args, "thorough", False))
+
+    ft = FullTextStore(settings)
+    embedder = Embedder(settings)
+    vec = VectorStore(settings, embedder)
+
+    log.info(
+        "subcommand_index_start",
+        thorough=thorough,
+        root_dir=str(settings.root_dir),
+        embedding_available=embedder.is_available(),
+    )
+
+    result = _reindex(
+        settings,
+        ft,
+        vec,
+        full_rebuild=False,
+        vector_index=thorough,
+        detect_file_type=detect_file_type,
+    )
+
+    payload = {
+        "ok": True,
+        "root_dir": str(settings.root_dir),
+        "data_dir": str(settings.data_dir),
+        "mode": "thorough" if thorough else "quick",
+        "files_indexed": result.files_indexed,
+        "chunks_indexed": result.chunks_indexed,
+        "chunks_evicted": result.chunks_evicted,
+        "vector_index_built": result.vector_index,
+        "embedding_available": embedder.is_available(),
+    }
+    if getattr(args, "as_json", False):
+        print(json.dumps(payload, indent=2))
+    else:
+        print("Indexing complete.")
+        print(f"  root:               {payload['root_dir']}")
+        print(f"  data:               {payload['data_dir']}")
+        print(f"  mode:               {payload['mode']}")
+        print(f"  files indexed:      {payload['files_indexed']}")
+        print(f"  chunks indexed:     {payload['chunks_indexed']}")
+        print(f"  chunks evicted:     {payload['chunks_evicted']}")
+        if not payload["embedding_available"]:
+            print(
+                "  (vector index not built: embedding model unavailable; rerun with network access)"
+            )
+    return 0
+
+
+def _run_index(args: argparse.Namespace) -> int:
+    return _run_index_async(args)
 
 
 # ---------------------------------------------------------------------------
@@ -344,6 +438,8 @@ def main(argv: list[str] | None = None) -> None:
             sys.exit(_run_search(args))
         if args.command == "stats":
             sys.exit(_run_stats(args))
+        if args.command == "index":
+            sys.exit(_run_index(args))
         sys.exit(f"Unknown subcommand: {args.command}")
 
     # ---- Legacy flag-based dispatch -----------------------------------
