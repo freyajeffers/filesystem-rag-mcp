@@ -42,6 +42,27 @@ format: ## Auto-format and auto-fix code with ruff
 doctor: ## Run system diagnostic and health checks
 	$(PYTHON) -m filesystem_rag_mcp.cli --doctor
 
+.PHONY: stats
+stats: ## Print full-text and vector index statistics
+	$(PYTHON) -m filesystem_rag_mcp.cli stats
+
+.PHONY: search
+search: ## Run a hybrid search query via the CLI (usage: make search QUERY="...")
+ifndef QUERY
+	$(error Usage: make search QUERY="<your query>" [TOP_K=5] [GLOB="docs/**/*.md"])
+endif
+	$(PYTHON) -m filesystem_rag_mcp.cli search "$(QUERY)" \
+		$(if $(TOP_K),--top-k $(TOP_K)) \
+		$(if $(GLOB),--glob "$(GLOB)") \
+		$(if $(ALPHA),--alpha $(ALPHA))
+
+.PHONY: index
+index: ## Build/refresh the on-disk index (usage: make index [THOROUGH=1] [ROOT_DIR=/path])
+	$(PYTHON) -m filesystem_rag_mcp.cli index \
+		$(if $(THOROUGH),--thorough) \
+		$(if $(ROOT_DIR),--root-dir "$(ROOT_DIR)") \
+		$(if $(DATA_DIR),--data-dir "$(DATA_DIR)")
+
 .PHONY: check ci
 check: lint typecheck test ## Run full CI pipeline locally (lint, typecheck, test)
 	@echo "\033[32mAll checks passed!\033[0m"
