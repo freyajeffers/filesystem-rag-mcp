@@ -13,7 +13,9 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any, ClassVar, cast
+
+from pydantic import BaseModel, ConfigDict, Field
 
 from .config import Settings
 from .indexing import Chunk
@@ -22,15 +24,25 @@ from .logging_setup import get_logger
 log = get_logger("vector")
 
 
-@dataclass(slots=True, frozen=True)
-class VectorHit:
-    chunk_id: str
-    rel_path: str
-    file_path: str
-    start: int
-    end: int
-    text: str
-    score: float  # cosine similarity in [0, 1] for normalized vectors
+class VectorHit(BaseModel):
+    """A single vector-similarity search result.
+
+    Frozen so downstream code can't mutate a returned hit (the previous
+    `@dataclass(slots=True, frozen=True)` contract). Pydantic gives us
+    free `model_dump()` for the search JSON output.
+    """
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
+
+    chunk_id: str = Field(description="Stable content-derived chunk identifier")
+    rel_path: str = Field(description="Path relative to the indexed root")
+    file_path: str = Field(description="Absolute filesystem path")
+    start: int = Field(description="Char offset where the chunk begins in the source file")
+    end: int = Field(description="Char offset one past the chunk's last char")
+    text: str = Field(description="Chunk text used for embedding")
+    score: float = Field(
+        description="Cosine similarity in [0, 1] for normalized vectors"
+    )
 
 
 class Embedder:
