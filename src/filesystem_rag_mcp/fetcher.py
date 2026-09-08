@@ -15,7 +15,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
-from filesystem_rag_mcp.errors import fetch_error
+from filesystem_rag_mcp.errors import fetch_error, invalid_parameter_error
 from filesystem_rag_mcp.logging_setup import get_logger
 
 log = get_logger("fetcher")
@@ -42,10 +42,12 @@ def fetch_sqlite_query(
         "detach",
     )
     if any(normalized.startswith(kw) or f" {kw} " in normalized for kw in dangerous_keywords):
-        return {
-            "success": False,
-            "error": "Only read-only SELECT queries are permitted for targeted data fetching.",
-        }
+        return invalid_parameter_error(
+            "sql",
+            sql[:80] + ("..." if len(sql) > 80 else ""),
+            "Only read-only SELECT queries are permitted for targeted SQLite fetching",
+            "Rewrite the query as a single SELECT statement; INSERT/UPDATE/DELETE/ATTACH/PRAGMA/vacuum are blocked.",
+        )
 
     try:
         conn = sqlite3.connect(f"file:{path.resolve()}?mode=ro", uri=True)

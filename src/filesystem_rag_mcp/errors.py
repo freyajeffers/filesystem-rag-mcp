@@ -86,6 +86,23 @@ def file_read_error(path: str, reason: str) -> dict[str, Any]:
     ).to_dict()
 
 
+def file_not_indexable_error(
+    path: str, reason: str, suggested_fix: str | None = None
+) -> dict[str, Any]:
+    """Returned when `read_file`/`list_directory`/etc. encounter a file the
+    indexer was configured to skip (binary, oversized, extension-blacklisted)."""
+    return AgentError(
+        code="FILE_NOT_INDEXABLE",
+        message=f"File '{path}' was skipped: {reason}",
+        suggested_fix=suggested_fix
+        or (
+            "Adjust settings.index_binary_files / index_ignore_globs to allow this "
+            "file, or use download_file_raw to inspect it as bytes."
+        ),
+        details={"path": path, "reason": reason},
+    ).to_dict()
+
+
 def conversion_error(path: str, detected_type: str, reason: str) -> dict[str, Any]:
     return AgentError(
         code="CONVERSION_FAILED",

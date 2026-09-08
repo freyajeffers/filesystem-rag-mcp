@@ -28,6 +28,7 @@ from .errors import (
     chunk_not_found_error,
     conversion_error,
     file_not_found_error,
+    file_not_indexable_error,
     file_read_error,
     invalid_parameter_error,
     not_a_file_error,
@@ -1191,11 +1192,10 @@ class _ServerState:
         from .security import is_indexable_file
 
         if not is_indexable_file(resolved, allow_binary=self.settings.index_binary_files):
-            return {
-                "success": False,
-                "rel_path": rel_path,
-                "message": "File is not indexable based on current settings",
-            }
+            return file_not_indexable_error(
+                rel_path,
+                "file is not indexable based on current settings (binary disabled or extension blacklisted)",
+            )
 
         st = resolved.stat()
         h = hashlib.sha256()

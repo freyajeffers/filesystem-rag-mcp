@@ -11,7 +11,11 @@ from pathlib import Path
 from typing import Any
 
 from .detector import detect_file_type
-from .errors import path_traversal_error
+from .errors import (
+    directory_not_found_error,
+    not_a_file_error,
+    path_traversal_error,
+)
 from .security import PathSecurityError, safe_resolve
 
 
@@ -32,16 +36,10 @@ def list_directory(
         return path_traversal_error(rel_path, str(root), str(exc))
 
     if not target.exists():
-        return {
-            "success": False,
-            "error": f"Path '{rel_path}' does not exist inside root workspace.",
-        }
+        return directory_not_found_error(rel_path, root=str(root))
 
     if not target.is_dir():
-        return {
-            "success": False,
-            "error": f"Path '{rel_path}' is a file, not a directory. Use read_file instead.",
-        }
+        return not_a_file_error(rel_path)
 
     entries: list[dict[str, Any]] = []
 
