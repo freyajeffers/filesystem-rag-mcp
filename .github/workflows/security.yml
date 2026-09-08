@@ -38,9 +38,13 @@ jobs:
       - name: Install project and dev dependencies
         run: uv sync --all-extras --dev
 
+      # bandit and pip-audit aren't project dev deps (they're security
+      # tooling used only by this workflow). Use `uv tool run` so they
+      # install into an isolated environment without polluting the
+      # project venv or breaking lockfile purity.
       - name: Generate bandit baseline from existing findings
         run: |
-          uv run bandit -r src/ -f json -o /tmp/bandit-initial.json || true
+          uv tool run --from bandit bandit -r src/ -f json -o /tmp/bandit-initial.json || true
           # If the baseline file doesn't exist, seed it with the current
           # findings so the first run after this commit doesn't fail.
           if [ ! -f .bandit-baseline.json ]; then
@@ -51,9 +55,9 @@ jobs:
 
       - name: Run bandit against baseline
         run: |
-          uv run bandit -r src/ -f json -o /tmp/bandit-current.json || EXIT=$?
+          uv tool run --from bandit bandit -r src/ -f json -o /tmp/bandit-current.json || EXIT=$?
           if [ -f .bandit-baseline.json ]; then
-            uv run bandit -r src/ -b .bandit-baseline.json -f json -o /tmp/bandit-new.json || EXIT=$?
+            uv tool run --from bandit bandit -r src/ -b .bandit-baseline.json -f json -o /tmp/bandit-new.json || EXIT=$?
             echo "Comparing current findings against baseline..."
           fi
 
@@ -95,4 +99,4 @@ jobs:
         # be silently deferred. Triage happens via follow-up commits.
         run: |
           uv export --no-hashes --output-file /tmp/requirements.txt
-          uv run pip-audit -r /tmp/requirements.txt --strict
+          uv tool run --from pip-audit pip-audit -r /tmp/requirements.txt --strict
