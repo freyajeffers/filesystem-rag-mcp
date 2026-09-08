@@ -12,7 +12,6 @@ we never mix vectors from different models in the same collection.
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import dataclass
 from typing import Any, ClassVar, cast
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -40,9 +39,7 @@ class VectorHit(BaseModel):
     start: int = Field(description="Char offset where the chunk begins in the source file")
     end: int = Field(description="Char offset one past the chunk's last char")
     text: str = Field(description="Chunk text used for embedding")
-    score: float = Field(
-        description="Cosine similarity in [0, 1] for normalized vectors"
-    )
+    score: float = Field(description="Cosine similarity in [0, 1] for normalized vectors")
 
 
 class Embedder:

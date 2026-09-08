@@ -5,7 +5,6 @@ Inspects file content directly rather than relying solely on file extensions.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -40,16 +39,10 @@ class FileTypeInfo(BaseModel):
 
     model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
 
-    label: str = Field(
-        description="Magika content-type label, e.g. 'pdf', 'python', 'markdown'"
-    )
+    label: str = Field(description="Magika content-type label, e.g. 'pdf', 'python', 'markdown'")
     mime_type: str = Field(description="Inferred MIME type, e.g. 'application/pdf'")
-    group: str = Field(
-        description="Magika top-level group, e.g. 'document', 'code', 'text'"
-    )
-    is_text: bool = Field(
-        description="True if Magika classified the file as plain text"
-    )
+    group: str = Field(description="Magika top-level group, e.g. 'document', 'code', 'text'")
+    is_text: bool = Field(description="True if Magika classified the file as plain text")
     is_convertible: bool = Field(
         description=(
             "True if the indexer should route this file through the Markdown "

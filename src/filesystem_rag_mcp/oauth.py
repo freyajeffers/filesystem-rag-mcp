@@ -34,7 +34,6 @@ import secrets
 import sqlite3
 import time
 from base64 import urlsafe_b64encode
-from dataclasses import dataclass
 from pathlib import Path
 from threading import RLock
 from typing import Any, ClassVar

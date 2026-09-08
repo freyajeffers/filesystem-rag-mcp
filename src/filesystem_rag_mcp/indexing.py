@@ -260,12 +260,8 @@ class ReindexResult(BaseModel):
         ),
         ge=0,
     )
-    full_rebuild: bool = Field(
-        description="True if the indexes were cleared before this pass"
-    )
-    vector_index: bool = Field(
-        description="True if vector embeddings were (re)computed this pass"
-    )
+    full_rebuild: bool = Field(description="True if the indexes were cleared before this pass")
+    vector_index: bool = Field(description="True if vector embeddings were (re)computed this pass")
 
 
 def reindex(
