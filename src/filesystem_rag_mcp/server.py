@@ -79,6 +79,12 @@ def build_server(settings: Settings, *, auth_provider: Any | None = None) -> MCP
         AuthSettings(
             issuer_url=settings.oauth_issuer,  # type: ignore[arg-type]
             resource_server_url=settings.oauth_issuer,  # type: ignore[arg-type]
+            # Enforce that bearer tokens are scoped to our resource server.
+            # Without this, the MCP SDK defaults validate_token_resource to
+            # None in 2.x and will switch to True in 3.0. Set it explicitly
+            # now to silence the MCPDeprecationWarning and lock in the
+            # resource-scoped check this project's OAuth provider relies on.
+            validate_token_resource=True,
             client_registration_options=ClientRegistrationOptions(
                 enabled=settings.oauth_allow_dynamic_registration,
                 valid_scopes=["fs.rag.read", "fs.rag.admin"],
