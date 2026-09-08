@@ -430,6 +430,11 @@ def main(argv: list[str] | None = None) -> None:
     # ---- Subcommand dispatch (new) ------------------------------------
     sub = _argv_uses_subcommand(argv_list)
     if sub is not None:
+        # Subcommands emit JSON to stdout for `--json` consumers, so we route
+        # all structlog status lines to stderr at WARNING-or-above. The legacy
+        # server-launcher path (below) calls configure_logging(args.log_level)
+        # with whatever the user requested.
+        configure_logging("WARNING")
         sub_parser = _build_subcommand_parser("filesystem-rag-mcp")
         args = sub_parser.parse_args(argv_list)
         if args.command == "doctor":
