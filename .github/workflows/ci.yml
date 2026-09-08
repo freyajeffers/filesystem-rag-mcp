@@ -62,8 +62,50 @@ jobs:
       - name: Type check with mypy
         run: uv run mypy src
 
+      - name: Cache HuggingFace models
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: hf-${{ runner.os }}-${{ hashFiles('pyproject.toml') }}
+          restore-keys: |
+            hf-${{ runner.os }}-
+
       - name: Verify doctor diagnostics
         run: uv run filesystem-rag-mcp --doctor
+
+      - name: Smoke test CLI subcommands
+        run: |
+          set -euo pipefail
+          CORPUS="$RUNNER_TEMP/ci-corpus"
+          DATA="$RUNNER_TEMP/ci-data"
+          mkdir -p "$CORPUS"
+          cat > "$CORPUS/a.md" <<'EOF'
+          # Hello
+          RAG search combines full-text and vector retrieval.
+          EOF
+          cat > "$CORPUS/b.md" <<'EOF'
+          # Notes
+          Chunking and indexing share a chunk store.
+          EOF
+
+          # doctor: must report healthy
+          uv run filesystem-rag-mcp doctor --json > /tmp/out.json
+          python -c "import json; d=json.load(open('/tmp/out.json')); assert d['healthy'], d"
+
+          # index (quick): must populate text index
+          uv run filesystem-rag-mcp index \
+              --root-dir "$CORPUS" --data-dir "$DATA" --json > /tmp/out.json
+          python -c "import json; d=json.load(open('/tmp/out.json')); assert d['ok'] and d['chunks_indexed'] >= 2, d"
+
+          # stats: must report non-zero text chunks
+          uv run filesystem-rag-mcp stats \
+              --root-dir "$CORPUS" --data-dir "$DATA" --json > /tmp/out.json
+          python -c "import json; d=json.load(open('/tmp/out.json')); assert d['fulltext_chunks'] >= 2, d"
+
+          # search: must return hits for our seed term
+          uv run filesystem-rag-mcp search "vector retrieval" \
+              --root-dir "$CORPUS" --data-dir "$DATA" --json > /tmp/out.json
+          python -c "import json; d=json.load(open('/tmp/out.json')); assert isinstance(d, list) and len(d) >= 1, d"
 
       - name: Run test suite with coverage
         run: |
