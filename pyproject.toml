@@ -41,6 +41,9 @@ dependencies = [
     "chromadb>=1.5.9",
     # Sentence-transformers for local embeddings (CPU-friendly default)
     "sentence-transformers>=6.0.1",
+    # HuggingFace Hub client (transitive via sentence-transformers, used
+    # directly by vector.Embedder to silence unauthenticated-request warnings).
+    "huggingface_hub>=1.30.0",
     # Pydantic for request/response schemas
     "pydantic>=2.13.5",
     # Structured logging

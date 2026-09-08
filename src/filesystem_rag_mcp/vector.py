@@ -50,6 +50,21 @@ class Embedder:
         try:
             from sentence_transformers import SentenceTransformer
 
+            # HuggingFace Hub emits a "You are sending unauthenticated
+            # requests to the HF Hub. Please set a HF_TOKEN..." WARNING
+            # every time the model is downloaded from the public Hub.
+            # This project ships without a token by design (users bring
+            # their own), so the warning is informational noise for every
+            # CLI subcommand and first-run test. Silence it on the
+            # specific logger that emits it. Other HF warnings still pass
+            # through at WARNING/CRITICAL.
+            try:
+                from huggingface_hub.utils import logging as _hf_logging
+
+                _hf_logging.set_verbosity_error()  # type: ignore[no-untyped-call]
+            except Exception:
+                pass
+
             self._model = SentenceTransformer(
                 settings.embedding_model,
                 local_files_only=settings.offline_mode,
