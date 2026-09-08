@@ -15,7 +15,7 @@ def test_patch_file_dry_run_and_execution(tmp_path: Path):
     # Ambiguous or non-existent
     err = patch_file(tmp_path, "app.py", "nonexistent", "new")
     assert err["success"] is False
-    assert err["code"] == "TARGET_NOT_FOUND"
+    assert err["error"]["code"] == "TARGET_NOT_FOUND"
 
     # Dry run
     dry = patch_file(tmp_path, "app.py", "'old'", "'dry_new'", dry_run=True)
