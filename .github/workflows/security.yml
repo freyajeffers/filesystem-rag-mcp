@@ -88,6 +88,11 @@ jobs:
         # `--no-deps` audits only direct dependencies to avoid noise from
         # transitive CVEs that the project can't directly remediate.
         # Drop `--no-deps` to audit the entire dependency tree.
+        #
+        # `--strict` makes pip-audit exit non-zero on any CVE (with or
+        # without a fix available). This is the right default for a
+        # security job: surfaces known issues immediately so they can't
+        # be silently deferred. Triage happens via follow-up commits.
         run: |
           uv export --no-hashes --output-file /tmp/requirements.txt
           uv run pip-audit -r /tmp/requirements.txt --strict
