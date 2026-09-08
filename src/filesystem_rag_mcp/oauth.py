@@ -37,7 +37,7 @@ from base64 import urlsafe_b64encode
 from dataclasses import dataclass
 from pathlib import Path
 from threading import RLock
-from typing import Any
+from typing import Any, ClassVar
 from urllib.parse import urlparse
 
 import jwt
@@ -57,7 +57,7 @@ from mcp.shared.auth import (
     OAuthToken,
     ProtectedResourceMetadata,
 )
-from pydantic import AnyHttpUrl, AnyUrl
+from pydantic import AnyHttpUrl, AnyUrl, BaseModel, ConfigDict, Field
 
 from .config import Settings
 from .logging_setup import get_logger
@@ -70,31 +70,35 @@ log = get_logger("oauth")
 # ---------------------------------------------------------------------------
 
 
-@dataclass(slots=True, frozen=True)
-class StoredAuthCode:
+class StoredAuthCode(BaseModel):
     """Internal record for an authorization code row."""
 
-    code: str
-    client_id: str
-    scopes: list[str]
-    expires_at: float
-    code_challenge: str
-    redirect_uri: str
-    redirect_uri_provided_explicitly: bool
-    resource: str | None
-    subject: str | None
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
+
+    code: str = Field(description="Opaque authorization code")
+    client_id: str = Field(description="OAuth client identifier")
+    scopes: list[str] = Field(description="Scopes granted at authorization time")
+    expires_at: float = Field(description="Unix epoch seconds when this code expires")
+    code_challenge: str = Field(description="PKCE code challenge (S256)")
+    redirect_uri: str = Field(description="Registered redirect URI for the code")
+    redirect_uri_provided_explicitly: bool = Field(
+        description="Whether the client supplied a redirect_uri at the auth endpoint"
+    )
+    resource: str | None = Field(description="RFC 8707 resource indicator, if any")
+    subject: str | None = Field(description="Subject claim bound to the eventual token")
 
 
-@dataclass(slots=True, frozen=True)
-class StoredRefreshToken:
+class StoredRefreshToken(BaseModel):
     """Internal record for a refresh token row."""
 
-    token: str
-    client_id: str
-    scopes: list[str]
-    expires_at: int
-    subject: str | None
-    resource: str | None
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
+
+    token: str = Field(description="Opaque refresh token")
+    client_id: str = Field(description="OAuth client identifier")
+    scopes: list[str] = Field(description="Scopes granted at original authorization")
+    expires_at: int = Field(description="Unix epoch seconds when this refresh token expires")
+    subject: str | None = Field(description="Subject claim bound to the issued access tokens")
+    resource: str | None = Field(description="RFC 8707 resource indicator, if any")
 
 
 class _OAuthStore:
