@@ -3,8 +3,25 @@ name: CI
 on:
   push:
     branches: [ "main" ]
+    paths-ignore:
+      - "docs/**"
+      - "**.md"
+      - ".github/dependabot.yml"
   pull_request:
     branches: [ "main" ]
+    paths-ignore:
+      - "docs/**"
+      - "**.md"
+      - ".github/dependabot.yml"
+
+# Cancel in-progress runs on the same ref when a new commit lands.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Least-privilege defaults. Individual jobs opt in to what they need.
+permissions:
+  contents: read
 
 jobs:
   test:
@@ -13,7 +30,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12"]
+        # pyproject.toml requires-python = ">=3.11,<3.14"
+        python-version: ["3.11", "3.12", "3.13"]
 
     steps:
       - name: Checkout repository
