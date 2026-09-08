@@ -39,7 +39,7 @@ from .fulltext import FullTextStore
 from .git_ops import git_search
 from .graph import CorpusGraphBuilder
 from .grep import grep_search
-from .indexing import Chunk, chunk_file, discover_files
+from .indexing import Chunk
 from .logging_setup import get_logger
 from .orchestrator import ContextOrchestrator
 from .patcher import patch_file
@@ -846,64 +846,34 @@ class _ServerState:
             vector_index=vector_index,
             root=str(self.settings.root_dir),
         )
-        files = discover_files(self.settings)
-        # On full rebuild, clear selected indexes first.
-        if full_rebuild:
-            for cid in list(self._ft.all_chunk_ids()):
-                self._ft.delete_by_chunk_id(cid)
-            if vector_index:
-                for cid in list(self._vec.all_chunk_ids()):
-                    self._vec.delete_by_chunk_id(cid)
+        from .detector import detect_file_type
+        from .indexing import reindex as _reindex
 
-        # Index files: chunk -> upsert into stores
-        new_chunk_ids: set[str] = set()
-        new_rel_paths: set[str] = set()
-        indexed_files = 0
-        indexed_chunks = 0
-        for fm in files:
-            chunks = chunk_file(fm, self.settings)
-            if not chunks:
-                continue
-            self._ft.upsert(chunks)
-            if vector_index:
-                # If index_binary_vectors is False, skip non-text fallback binary files in vector store
-                if not self.settings.index_binary_vectors:
-                    type_info = detect_file_type(fm.abs_path)
-                    if not type_info.is_text and not type_info.is_convertible:
-                        pass
-                    else:
-                        self._vec.upsert(chunks)
-                else:
-                    self._vec.upsert(chunks)
-            new_chunk_ids.update(c.chunk_id for c in chunks)
-            new_rel_paths.add(fm.rel_path)
-            indexed_files += 1
-            indexed_chunks += len(chunks)
-
-        # Evict stale chunks whose rel_path is no longer present
-        all_text_ids = self._ft.all_chunk_ids()
-        for stale_id in all_text_ids - new_chunk_ids:
-            self._ft.delete_by_chunk_id(stale_id)
-
-        if vector_index:
-            all_vec_ids = self._vec.all_chunk_ids()
-            for stale_id in all_vec_ids - new_chunk_ids:
-                self._vec.delete_by_chunk_id(stale_id)
+        result = _reindex(
+            self.settings,
+            self._ft,
+            self._vec,
+            full_rebuild=full_rebuild,
+            vector_index=vector_index,
+            detect_file_type=detect_file_type,
+        )
 
         self._last_refresh_at = _now()
         self._query_cache.invalidate()
         log.info(
             "refresh_index_done",
-            files=indexed_files,
-            chunks=indexed_chunks,
+            files=result.files_indexed,
+            chunks=result.chunks_indexed,
             full_rebuild=full_rebuild,
             vector_index=vector_index,
+            evicted=result.chunks_evicted,
         )
         return {
             "full_rebuild": full_rebuild,
             "vector_index": vector_index,
-            "files_indexed": indexed_files,
-            "chunks_indexed": indexed_chunks,
+            "files_indexed": result.files_indexed,
+            "chunks_indexed": result.chunks_indexed,
+            "chunks_evicted": result.chunks_evicted,
             "root": str(self.settings.root_dir),
             "completed_at": self._last_refresh_at,
         }

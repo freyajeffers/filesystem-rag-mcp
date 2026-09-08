@@ -16,6 +16,7 @@ import hashlib
 from dataclasses import dataclass
 from fnmatch import fnmatch
 from pathlib import Path
+from typing import Any
 
 from .config import Settings
 from .converter import convert_file_to_markdown
@@ -214,3 +215,93 @@ def _chunk_id(file_meta: FileMeta, start: int, end: int, body: str) -> str:
     h.update(b"|")
     h.update(body[:64].encode("utf-8", errors="replace"))
     return h.hexdigest()[:24]
+
+
+@dataclass(slots=True, frozen=True)
+class ReindexResult:
+    """Summary of a full reindex pass.
+
+    `files_indexed` counts files that produced at least one chunk.
+    `chunks_indexed` is the total number of chunks upserted into the stores.
+    `chunks_evicted` counts stale chunks removed because their file was
+    deleted or replaced since the previous index.
+    """
+
+    files_indexed: int
+    chunks_indexed: int
+    chunks_evicted: int
+    full_rebuild: bool
+    vector_index: bool
+
+
+def reindex(
+    settings: Settings,
+    ft: Any,  # FullTextStore (avoid import cycle)
+    vec: Any,  # VectorStore
+    *,
+    full_rebuild: bool = False,
+    vector_index: bool = True,
+    detect_file_type: Any = None,
+) -> ReindexResult:
+    """Walk `settings.root_dir` and refresh both full-text and vector indexes.
+
+    This is the shared indexing pipeline used by the MCP server's background
+    indexing tasks and by the `index` CLI subcommand. It is intentionally
+    blocking/synchronous so that CLI invocations don't need a running event
+    loop.
+
+    If `full_rebuild` is True, the existing indexes are cleared before any
+    new chunks are added. Stale chunks (whose `rel_path` is no longer
+    present in the discovered file set) are always evicted at the end.
+
+    When `vector_index` is True, chunks are also inserted into the vector
+    store. When False, only the full-text index is updated (the "quick"
+    pass used to make text queries ready before embeddings complete).
+    """
+    files = discover_files(settings)
+
+    # On full rebuild, clear selected indexes first.
+    if full_rebuild:
+        for cid in list(ft.all_chunk_ids()):
+            ft.delete_by_chunk_id(cid)
+        if vector_index:
+            for cid in list(vec.all_chunk_ids()):
+                vec.delete_by_chunk_id(cid)
+
+    new_chunk_ids: set[str] = set()
+    indexed_files = 0
+    indexed_chunks = 0
+    for fm in files:
+        chunks = chunk_file(fm, settings)
+        if not chunks:
+            continue
+        ft.upsert(chunks)
+        if vector_index:
+            if not settings.index_binary_vectors and detect_file_type is not None:
+                type_info = detect_file_type(fm.abs_path)
+                if type_info.is_text or type_info.is_convertible:
+                    vec.upsert(chunks)
+            else:
+                vec.upsert(chunks)
+        new_chunk_ids.update(c.chunk_id for c in chunks)
+        indexed_files += 1
+        indexed_chunks += len(chunks)
+
+    evicted = 0
+    all_text_ids = set(ft.all_chunk_ids())
+    for stale_id in all_text_ids - new_chunk_ids:
+        ft.delete_by_chunk_id(stale_id)
+        evicted += 1
+    if vector_index:
+        all_vec_ids = set(vec.all_chunk_ids())
+        for stale_id in all_vec_ids - new_chunk_ids:
+            vec.delete_by_chunk_id(stale_id)
+            evicted += 1
+
+    return ReindexResult(
+        files_indexed=indexed_files,
+        chunks_indexed=indexed_chunks,
+        chunks_evicted=evicted,
+        full_rebuild=full_rebuild,
+        vector_index=vector_index,
+    )
