@@ -6,19 +6,35 @@ import importlib.util
 import os
 import shutil
 import sys
-from dataclasses import dataclass
 from pathlib import Path
+from typing import ClassVar
+
+from pydantic import BaseModel, ConfigDict, Field
 
 from .config import Settings
 
 
-@dataclass
-class DiagnosticCheck:
-    name: str
-    category: str
-    passed: bool
-    details: str
-    remediation: str | None = None
+class DiagnosticCheck(BaseModel):
+    """A single health-check result emitted by `run_diagnostics()`.
+
+    Returned by ~15 individual check functions and serialized into the
+    `doctor --json` output. Promoted to BaseModel so the JSON Schema is
+    auto-derivable and field metadata travels with the type (rather
+    than living only in a docstring).
+    """
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
+
+    name: str = Field(description="Short label, e.g. 'Python Version'")
+    category: str = Field(
+        description="Bucket the check belongs to: Environment, Filesystem, Dependencies, etc."
+    )
+    passed: bool = Field(description="True if the check succeeded")
+    details: str = Field(description="Human-readable explanation of the result")
+    remediation: str | None = Field(
+        default=None,
+        description="Actionable advice for the user when the check fails",
+    )
 
 
 def check_python_version() -> DiagnosticCheck:
@@ -217,12 +233,13 @@ def print_doctor_report(settings: Settings | None = None, as_json: bool = False)
 
     if as_json:
         import json
-        from dataclasses import asdict
 
         data = {
             "healthy": all_passed,
             "status": "HEALTHY" if all_passed else "WARNING",
-            "checks": [asdict(c) for c in checks],
+            # DiagnosticCheck is now a Pydantic BaseModel; use its native
+            # serializer instead of dataclasses.asdict.
+            "checks": [c.model_dump() for c in checks],
         }
         print(json.dumps(data, indent=2))
         return 0 if all_passed else 1
