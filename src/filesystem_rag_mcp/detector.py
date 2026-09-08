@@ -7,7 +7,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
+
+from pydantic import BaseModel, ConfigDict, Field
 
 from filesystem_rag_mcp.logging_setup import get_logger
 
@@ -29,13 +31,31 @@ def _get_magika() -> Any:
     return _magika_instance if _magika_instance is not False else None
 
 
-@dataclass(slots=True, frozen=True)
-class FileTypeInfo:
-    label: str
-    mime_type: str
-    group: str
-    is_text: bool
-    is_convertible: bool
+class FileTypeInfo(BaseModel):
+    """Result of running Magika + magic-byte detection on a single file.
+
+    Frozen so downstream code (the converter, the indexer) can rely on
+    the fields not mutating after construction.
+    """
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
+
+    label: str = Field(
+        description="Magika content-type label, e.g. 'pdf', 'python', 'markdown'"
+    )
+    mime_type: str = Field(description="Inferred MIME type, e.g. 'application/pdf'")
+    group: str = Field(
+        description="Magika top-level group, e.g. 'document', 'code', 'text'"
+    )
+    is_text: bool = Field(
+        description="True if Magika classified the file as plain text"
+    )
+    is_convertible: bool = Field(
+        description=(
+            "True if the indexer should route this file through the Markdown "
+            "converter before chunking"
+        )
+    )
 
 
 CONVERTIBLE_LABELS: frozenset[str] = frozenset(
