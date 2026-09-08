@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import fnmatch
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, ClassVar
+
+from pydantic import BaseModel, ConfigDict, Field
 
 from .config import Settings
 from .fulltext import FullTextStore, TextHit
@@ -34,16 +36,29 @@ def _get_ranker() -> Any:
     return _ranker_instance if _ranker_instance is not False else None
 
 
-@dataclass(slots=True, frozen=True)
-class SearchHit:
-    chunk_id: str
-    rel_path: str
-    file_path: str
-    start: int
-    end: int
-    text: str
-    score: float  # hybrid/reranked score, higher is better
-    sources: tuple[str, ...]  # ("text",) or ("vector",) or both
+class SearchHit(BaseModel):
+    """A single hybrid (text + vector) search result returned to MCP callers.
+
+    Frozen so downstream consumers can't mutate a returned hit. The
+    `sources` field carries provenance tags ("text", "vector", or both)
+    so the caller can see which index paths contributed to the score.
+    """
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
+
+    chunk_id: str = Field(description="Stable content-derived chunk identifier")
+    rel_path: str = Field(description="Path relative to the indexed root")
+    file_path: str = Field(description="Absolute filesystem path")
+    start: int = Field(description="Char offset where the chunk begins in the source file")
+    end: int = Field(description="Char offset one past the chunk's last char")
+    text: str = Field(description="Chunk text used for embedding / matching")
+    score: float = Field(description="Hybrid or reranked score; higher is better")
+    sources: tuple[str, ...] = Field(
+        description=(
+            "Provenance tags naming which indexes contributed to this hit; "
+            "subset of {'text', 'vector'}"
+        )
+    )
 
 
 class SearchEngine:
