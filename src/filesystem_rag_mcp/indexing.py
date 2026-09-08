@@ -16,7 +16,9 @@ import hashlib
 from dataclasses import dataclass
 from fnmatch import fnmatch
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
+
+from pydantic import BaseModel, ConfigDict, Field
 
 from .config import Settings
 from .converter import convert_file_to_markdown
@@ -26,7 +28,16 @@ from .semantic_chunker import semantic_chunk_text
 
 @dataclass(slots=True, frozen=True)
 class Chunk:
-    """A single piece of a file, ready to be embedded and indexed."""
+    """A single piece of a file, ready to be embedded and indexed.
+
+    Kept as `@dataclass(slots=True, frozen=True)` rather than Pydantic because
+    a single indexing pass constructs thousands of these (one per chunk
+    across every file in the root tree) and Pydantic's runtime validation
+    adds measurable overhead in that hot loop. The trade-off is that this
+    type doesn't get free JSON Schema generation; callers that need to
+    emit a chunk externally should wrap it (e.g. `ChunkSchema(**dataclasses.asdict(c))`)
+    before serializing.
+    """
 
     chunk_id: str
     file_path: str  # absolute, validated path
@@ -42,7 +53,12 @@ class Chunk:
 
 @dataclass(slots=True, frozen=True)
 class FileMeta:
-    """Lightweight metadata about an indexed file."""
+    """Lightweight metadata about an indexed file.
+
+    Same hot-path rationale as `Chunk`: `discover_files()` instantiates
+    one of these per candidate file during walk, and there is no API
+    surface that would benefit from Pydantic validation.
+    """
 
     abs_path: Path
     rel_path: str
@@ -217,21 +233,39 @@ def _chunk_id(file_meta: FileMeta, start: int, end: int, body: str) -> str:
     return h.hexdigest()[:24]
 
 
-@dataclass(slots=True, frozen=True)
-class ReindexResult:
+class ReindexResult(BaseModel):
     """Summary of a full reindex pass.
 
-    `files_indexed` counts files that produced at least one chunk.
-    `chunks_indexed` is the total number of chunks upserted into the stores.
-    `chunks_evicted` counts stale chunks removed because their file was
-    deleted or replaced since the previous index.
+    Returned by `indexing.reindex()` once per indexing call (not per chunk),
+    so Pydantic validation overhead is negligible. Promoted to BaseModel
+    because the `index` CLI subcommand dumps this directly to JSON and
+    the same shape is also returned to MCP callers as part of
+    `refresh_index`.
     """
 
-    files_indexed: int
-    chunks_indexed: int
-    chunks_evicted: int
-    full_rebuild: bool
-    vector_index: bool
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
+
+    files_indexed: int = Field(
+        description="Number of files that produced at least one chunk",
+        ge=0,
+    )
+    chunks_indexed: int = Field(
+        description="Total number of chunks upserted into the stores",
+        ge=0,
+    )
+    chunks_evicted: int = Field(
+        description=(
+            "Stale chunks removed because their file was deleted or replaced "
+            "since the previous index"
+        ),
+        ge=0,
+    )
+    full_rebuild: bool = Field(
+        description="True if the indexes were cleared before this pass"
+    )
+    vector_index: bool = Field(
+        description="True if vector embeddings were (re)computed this pass"
+    )
 
 
 def reindex(
