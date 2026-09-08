@@ -15,6 +15,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
+from filesystem_rag_mcp.errors import fetch_error
 from filesystem_rag_mcp.logging_setup import get_logger
 
 log = get_logger("fetcher")
@@ -62,7 +63,7 @@ def fetch_sqlite_query(
             "rows": dict_rows,
         }
     except Exception as exc:
-        return {"success": False, "error": f"SQLite query failed: {exc}"}
+        return fetch_error("SQLite", f"query {sql!r}", str(exc))
 
 
 def _resolve_json_path(data: Any, path_expr: str) -> Any:
@@ -131,7 +132,7 @@ def fetch_json_data(
             "truncated": truncated,
         }
     except Exception as exc:
-        return {"success": False, "error": f"JSON query failed: {exc}"}
+        return fetch_error("JSON", f"path {path_expr!r}", str(exc))
 
 
 def fetch_csv_data(
@@ -195,7 +196,7 @@ def fetch_csv_data(
             "rows": results,
         }
     except Exception as exc:
-        return {"success": False, "error": f"CSV query failed: {exc}"}
+        return fetch_error("CSV", f"filter {filter_col!r}={filter_value!r}", str(exc))
 
 
 def fetch_lines(
@@ -221,4 +222,4 @@ def fetch_lines(
             "lines": formatted,
         }
     except Exception as exc:
-        return {"success": False, "error": f"Line fetch failed: {exc}"}
+        return fetch_error("line range", f"lines {start_line}-{end_line}", str(exc))

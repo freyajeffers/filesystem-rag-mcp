@@ -7,6 +7,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
+from .errors import directory_not_found_error
 from .security import is_indexable_file, safe_resolve
 
 
@@ -30,7 +31,7 @@ class CorpusGraphBuilder:
     def build_graph(self, sub_dir: str = "", max_files: int = 500) -> dict[str, Any]:
         search_dir = safe_resolve(self.root, sub_dir)
         if not search_dir.exists():
-            return {"error": f"Directory not found: {sub_dir}"}
+            return directory_not_found_error(sub_dir, root=str(self.root))
 
         all_files: list[Path] = []
         for p in search_dir.rglob("*"):
