@@ -1,8 +1,13 @@
 """Command-line entrypoint for filesystem-rag-mcp.
 
-Usage:
+Usage (legacy flag-based server launcher — unchanged for backward compatibility):
   filesystem-rag-mcp --transport stdio --root-dir /path/to/docs
   filesystem-rag-mcp --transport http --host 127.0.0.1 --port 8000 --root-dir /path/to/docs
+
+Subcommand form (new in this release):
+  filesystem-rag-mcp doctor [--json] [--root-dir DIR] [--data-dir DIR]
+  filesystem-rag-mcp search  QUERY [-- top-k N] [-- alpha F] [--glob PAT] [--fuzzy] [--rerank] [--json]
+  filesystem-rag-mcp stats   [--root-dir DIR] [--data-dir DIR] [--json]
 """
 
 from __future__ import annotations
@@ -20,6 +25,207 @@ from .logging_setup import configure_logging, get_logger
 from .server import build_server
 
 log = get_logger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Subcommand dispatch
+# ---------------------------------------------------------------------------
+
+_SUBCOMMANDS = ("doctor", "search", "stats")
+
+
+def _argv_uses_subcommand(argv: list[str]) -> str | None:
+    """Return the subcommand name if the first positional arg is recognized.
+
+    `argv` here is the program-relative arg list (e.g. ``['doctor']`` or
+    ``['--transport', 'stdio']``). We inspect the *first* non-flag token so
+    the legacy flag-only path (e.g. ``--transport``) is never accidentally
+    parsed as a subcommand. This avoids restructuring the existing
+    top-level parser.
+    """
+    if not argv:
+        return None
+    if argv[0].startswith("-"):
+        return None
+    return argv[0] if argv[0] in _SUBCOMMANDS else None
+
+
+def _build_subcommand_parser(prog: str) -> argparse.ArgumentParser:
+    """Build a fresh parser dedicated to the new subcommand surface."""
+    parser = argparse.ArgumentParser(
+        prog=prog,
+        description="filesystem-rag-mcp maintenance subcommands",
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {__version__}",
+    )
+
+    sub_p = parser.add_subparsers(dest="command", required=True, metavar="COMMAND")
+
+    # doctor ---------------------------------------------------------------
+    p_doc = sub_p.add_parser(
+        "doctor",
+        help="Run environment, dependency, and health diagnostics and exit",
+    )
+    p_doc.add_argument(
+        "--json", action="store_true", dest="as_json", help="Emit JSON instead of formatted text"
+    )
+    p_doc.add_argument("--root-dir", type=Path, default=Path(os.environ.get("FSRAG_ROOT_DIR", ".")))
+    p_doc.add_argument(
+        "--data-dir", type=Path, default=Path(os.environ.get("FSRAG_DATA_DIR", ".fsrag"))
+    )
+
+    # search ---------------------------------------------------------------
+    p_search = sub_p.add_parser(
+        "search",
+        help="Run a hybrid full-text + vector search over the on-disk index",
+    )
+    p_search.add_argument("query", help="Search query text")
+    p_search.add_argument("--top-k", type=int, default=None)
+    p_search.add_argument(
+        "--alpha", type=float, default=None, help="Hybrid weight: 0=text-only, 1=vector-only"
+    )
+    p_search.add_argument("--glob", dest="path_glob", default=None)
+    p_search.add_argument("--fuzzy", action="store_true")
+    p_search.add_argument("--rerank", action="store_true")
+    p_search.add_argument("--json", action="store_true", dest="as_json")
+    p_search.add_argument(
+        "--root-dir", type=Path, default=Path(os.environ.get("FSRAG_ROOT_DIR", "."))
+    )
+    p_search.add_argument(
+        "--data-dir", type=Path, default=Path(os.environ.get("FSRAG_DATA_DIR", ".fsrag"))
+    )
+
+    # stats ----------------------------------------------------------------
+    p_stats = sub_p.add_parser("stats", help="Print full-text and vector index statistics and exit")
+    p_stats.add_argument("--json", action="store_true", dest="as_json")
+    p_stats.add_argument(
+        "--root-dir", type=Path, default=Path(os.environ.get("FSRAG_ROOT_DIR", "."))
+    )
+    p_stats.add_argument(
+        "--data-dir", type=Path, default=Path(os.environ.get("FSRAG_DATA_DIR", ".fsrag"))
+    )
+
+    return parser
+
+
+# ---------------------------------------------------------------------------
+# Subcommand handlers
+# ---------------------------------------------------------------------------
+
+
+def _run_doctor(args: argparse.Namespace) -> int:
+    from .doctor import print_doctor_report
+
+    settings = Settings(
+        root_dir=args.root_dir.resolve(),
+        data_dir=args.data_dir.resolve(),
+    )
+    return print_doctor_report(settings, as_json=getattr(args, "as_json", False))
+
+
+def _run_search(args: argparse.Namespace) -> int:
+    from .fulltext import FullTextStore
+    from .search import SearchEngine
+    from .vector import Embedder, VectorStore
+
+    settings = Settings(
+        root_dir=args.root_dir.resolve(),
+        data_dir=args.data_dir.resolve(),
+    )
+
+    ft = FullTextStore(settings)
+    embedder = Embedder(settings)
+    vec = VectorStore(settings, embedder)
+    engine = SearchEngine(settings, ft, vec)
+
+    hits = engine.search(
+        args.query,
+        top_k=args.top_k,
+        alpha=args.alpha,
+        path_glob=args.path_glob,
+        rerank=args.rerank,
+        fuzzy=args.fuzzy,
+    )
+
+    if getattr(args, "as_json", False):
+        print(
+            json.dumps(
+                [
+                    {
+                        "chunk_id": h.chunk_id,
+                        "rel_path": h.rel_path,
+                        "score": h.score,
+                        "sources": list(h.sources),
+                        "snippet": h.text[:240],
+                    }
+                    for h in hits
+                ],
+                indent=2,
+            )
+        )
+    else:
+        if not hits:
+            print(f"(no hits for: {args.query!r})")
+            return 1
+        for i, h in enumerate(hits, start=1):
+            tag = "+".join(h.sources) if h.sources else "?"
+            snippet = h.text.replace("\n", " ")[:200]
+            print(f"[{i:>2}] {h.score:.4f}  {h.rel_path}  ({tag})")
+            print(f"     {snippet}")
+
+    return 0
+
+
+def _run_stats(args: argparse.Namespace) -> int:
+    from .fulltext import FullTextStore
+    from .vector import Embedder, VectorStore
+
+    settings = Settings(
+        root_dir=args.root_dir.resolve(),
+        data_dir=args.data_dir.resolve(),
+    )
+
+    ft = FullTextStore(settings)
+    embedder = Embedder(settings)
+    vec = VectorStore(settings, embedder)
+
+    data = {
+        "root_dir": str(settings.root_dir),
+        "data_dir": str(settings.data_dir),
+        "embedding_model": settings.embedding_model,
+        "fulltext_chunks": ft.count(),
+        "vector_chunks": vec.count(),
+        "chunk_size": settings.chunk_size,
+        "chunk_overlap": settings.chunk_overlap,
+        "hybrid_alpha": settings.hybrid_alpha,
+        "default_top_k": settings.default_top_k,
+    }
+
+    if getattr(args, "as_json", False):
+        print(json.dumps(data, indent=2))
+    else:
+        print("=" * 60)
+        print("  filesystem-rag-mcp Index Statistics")
+        print("=" * 60)
+        print(f"  Root directory:        {data['root_dir']}")
+        print(f"  Data directory:        {data['data_dir']}")
+        print(f"  Embedding model:       {data['embedding_model']}")
+        print(f"  Full-text chunks:      {data['fulltext_chunks']}")
+        print(f"  Vector chunks:         {data['vector_chunks']}")
+        print(f"  Chunk size / overlap:  {data['chunk_size']} / {data['chunk_overlap']}")
+        print(f"  Hybrid alpha:          {data['hybrid_alpha']}")
+        print(f"  Default top-k:         {data['default_top_k']}")
+        print("=" * 60)
+
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# Legacy argparse (unchanged)
+# ---------------------------------------------------------------------------
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -98,17 +304,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--offline",
         action="store_true",
-        default=os.environ.get("FSRAG_OFFLINE_MODE", "false").lower() in {"1", "true", "yes"},
-        help="Disable outbound HF network calls; degrade gracefully if weights are missing",
+        default=os.environ.get("FSRAG_OFFLINE", "false").lower() in {"1", "true", "yes"},
+        help="Run in offline mode (do not download embedding model from HuggingFace)",
     )
     parser.add_argument(
         "--oauth-issuer",
-        default=os.environ.get("FSRAG_OAUTH_ISSUER", None),
-        help="Custom public OAuth issuer URL (e.g., https://files.mcp.freyajeffers.rocks)",
+        default=os.environ.get("FSRAG_OAUTH_ISSUER"),
+        help="OAuth 2.1 issuer URL (defaults to http://<host>:<port>)",
     )
     parser.add_argument(
         "--create-client",
-        metavar="CLIENT_NAME",
+        metavar="NAME",
         help="Pre-generate an OAuth client (client_id + client_secret), persist to database, print credentials, and exit",
     )
     parser.add_argument(
@@ -125,6 +331,22 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None) -> None:
+    argv_list = sys.argv[1:] if argv is None else argv
+
+    # ---- Subcommand dispatch (new) ------------------------------------
+    sub = _argv_uses_subcommand(argv_list)
+    if sub is not None:
+        sub_parser = _build_subcommand_parser("filesystem-rag-mcp")
+        args = sub_parser.parse_args(argv_list)
+        if args.command == "doctor":
+            sys.exit(_run_doctor(args))
+        if args.command == "search":
+            sys.exit(_run_search(args))
+        if args.command == "stats":
+            sys.exit(_run_stats(args))
+        sys.exit(f"Unknown subcommand: {args.command}")
+
+    # ---- Legacy flag-based dispatch -----------------------------------
     args = parse_args(argv)
 
     if args.doctor:
