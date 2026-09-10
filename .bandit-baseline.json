@@ -1,17 +1,17 @@
 {
   "errors": [],
-  "generated_at": "2026-09-08T08:52:07Z",
+  "generated_at": "2026-09-10T03:36:45Z",
   "metrics": {
     "_totals": {
-      "CONFIDENCE.HIGH": 23,
+      "CONFIDENCE.HIGH": 24,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 3,
       "CONFIDENCE.UNDEFINED": 0,
       "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 24,
+      "SEVERITY.LOW": 25,
       "SEVERITY.MEDIUM": 2,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 5854,
+      "loc": 6023,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -76,7 +76,7 @@
       "SEVERITY.LOW": 3,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 205,
+      "loc": 214,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -89,7 +89,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 224,
+      "loc": 235,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -102,7 +102,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 92,
+      "loc": 197,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -115,7 +115,7 @@
       "SEVERITY.LOW": 1,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 187,
+      "loc": 190,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -128,7 +128,7 @@
       "SEVERITY.LOW": 1,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 145,
+      "loc": 152,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -154,7 +154,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 114,
+      "loc": 115,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -180,7 +180,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 259,
+      "loc": 285,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -206,7 +206,7 @@
       "SEVERITY.LOW": 1,
       "SEVERITY.MEDIUM": 1,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 529,
+      "loc": 530,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -232,7 +232,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 99,
+      "loc": 85,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -258,7 +258,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 155,
+      "loc": 166,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -297,7 +297,7 @@
       "SEVERITY.LOW": 12,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 1490,
+      "loc": 1491,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -323,20 +323,20 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 94,
+      "loc": 92,
       "nosec": 0,
       "skipped_tests": 0
     },
     "src/filesystem_rag_mcp/vector.py": {
-      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.HIGH": 1,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
       "CONFIDENCE.UNDEFINED": 0,
       "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 0,
+      "SEVERITY.LOW": 1,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 144,
+      "loc": 154,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -376,7 +376,7 @@
       "test_name": "hardcoded_sql_expressions"
     },
     {
-      "code": "168                                 )\n169                         except Exception:\n170                             pass\n171         except Exception:\n",
+      "code": "181                                 )\n182                         except Exception:\n183                             pass\n184         except Exception:\n",
       "col_offset": 24,
       "end_col_offset": 32,
       "filename": "src/filesystem_rag_mcp/detector.py",
@@ -387,17 +387,17 @@
       },
       "issue_severity": "LOW",
       "issue_text": "Try, Except, Pass detected.",
-      "line_number": 169,
+      "line_number": 182,
       "line_range": [
-        169,
-        170
+        182,
+        183
       ],
       "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html",
       "test_id": "B110",
       "test_name": "try_except_pass"
     },
     {
-      "code": "170                             pass\n171         except Exception:\n172             pass\n173 \n",
+      "code": "183                             pass\n184         except Exception:\n185             pass\n186 \n",
       "col_offset": 8,
       "end_col_offset": 16,
       "filename": "src/filesystem_rag_mcp/detector.py",
@@ -408,17 +408,17 @@
       },
       "issue_severity": "LOW",
       "issue_text": "Try, Except, Pass detected.",
-      "line_number": 171,
+      "line_number": 184,
       "line_range": [
-        171,
-        172
+        184,
+        185
       ],
       "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html",
       "test_id": "B110",
       "test_name": "try_except_pass"
     },
     {
-      "code": "196                     )\n197         except Exception:\n198             pass\n199 \n",
+      "code": "209                     )\n210         except Exception:\n211             pass\n212 \n",
       "col_offset": 8,
       "end_col_offset": 16,
       "filename": "src/filesystem_rag_mcp/detector.py",
@@ -429,17 +429,17 @@
       },
       "issue_severity": "LOW",
       "issue_text": "Try, Except, Pass detected.",
-      "line_number": 197,
+      "line_number": 210,
       "line_range": [
-        197,
-        198
+        210,
+        211
       ],
       "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html",
       "test_id": "B110",
       "test_name": "try_except_pass"
     },
     {
-      "code": "111                     items.append(json.loads(line))\n112                 except Exception:\n113                     continue\n114             parsed_data = items\n",
+      "code": "114                     items.append(json.loads(line))\n115                 except Exception:\n116                     continue\n117             parsed_data = items\n",
       "col_offset": 16,
       "end_col_offset": 28,
       "filename": "src/filesystem_rag_mcp/fetcher.py",
@@ -450,17 +450,17 @@
       },
       "issue_severity": "LOW",
       "issue_text": "Try, Except, Continue detected.",
-      "line_number": 112,
+      "line_number": 115,
       "line_range": [
-        112,
-        113
+        115,
+        116
       ],
       "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b112_try_except_continue.html",
       "test_id": "B112",
       "test_name": "try_except_continue"
     },
     {
-      "code": "142                     hits = [_normalize_hit(s, h) for h in raw_hits]\n143                 except Exception:\n144                     pass\n145 \n",
+      "code": "152                     hits = [_normalize_hit(s, h) for h in raw_hits]\n153                 except Exception:\n154                     pass\n155 \n",
       "col_offset": 16,
       "end_col_offset": 24,
       "filename": "src/filesystem_rag_mcp/fulltext.py",
@@ -471,10 +471,10 @@
       },
       "issue_severity": "LOW",
       "issue_text": "Try, Except, Pass detected.",
-      "line_number": 143,
+      "line_number": 153,
       "line_range": [
-        143,
-        144
+        153,
+        154
       ],
       "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html",
       "test_id": "B110",
@@ -561,7 +561,7 @@
       "test_name": "subprocess_without_shell_equals_true"
     },
     {
-      "code": "576             access_token=access.token,\n577             token_type=\"Bearer\",\n578             expires_in=self.settings.oauth_access_token_ttl_seconds,\n579             scope=\" \".join(scopes) if scopes else None,\n580             refresh_token=rt.token,\n581         )\n582 \n583     def _mint_jwt(\n584         self,\n",
+      "code": "579             access_token=access.token,\n580             token_type=\"Bearer\",\n581             expires_in=self.settings.oauth_access_token_ttl_seconds,\n582             scope=\" \".join(scopes) if scopes else None,\n583             refresh_token=rt.token,\n584         )\n585 \n586     def _mint_jwt(\n587         self,\n",
       "col_offset": 15,
       "end_col_offset": 9,
       "filename": "src/filesystem_rag_mcp/oauth.py",
@@ -572,22 +572,22 @@
       },
       "issue_severity": "LOW",
       "issue_text": "Possible hardcoded password: 'Bearer'",
-      "line_number": 577,
+      "line_number": 580,
       "line_range": [
-        575,
-        576,
-        577,
         578,
         579,
         580,
-        581
+        581,
+        582,
+        583,
+        584
       ],
       "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b106_hardcoded_password_funcarg.html",
       "test_id": "B106",
       "test_name": "hardcoded_password_funcarg"
     },
     {
-      "code": "634         host = (parsed.hostname or \"\").lower()\n635         return host in {\"127.0.0.1\", \"::1\", \"localhost\", \"0.0.0.0\"}\n636     return bool(parsed.scheme)\n",
+      "code": "637         host = (parsed.hostname or \"\").lower()\n638         return host in {\"127.0.0.1\", \"::1\", \"localhost\", \"0.0.0.0\"}\n639     return bool(parsed.scheme)\n",
       "col_offset": 57,
       "end_col_offset": 66,
       "filename": "src/filesystem_rag_mcp/oauth.py",
@@ -598,16 +598,16 @@
       },
       "issue_severity": "MEDIUM",
       "issue_text": "Possible binding to all interfaces.",
-      "line_number": 635,
+      "line_number": 638,
       "line_range": [
-        635
+        638
       ],
       "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b104_hardcoded_bind_all_interfaces.html",
       "test_id": "B104",
       "test_name": "hardcoded_bind_all_interfaces"
     },
     {
-      "code": "752             self._ensure()\n753             assert self._engine is not None\n754 \n",
+      "code": "759             self._ensure()\n760             assert self._engine is not None\n761 \n",
       "col_offset": 12,
       "end_col_offset": 43,
       "filename": "src/filesystem_rag_mcp/server.py",
@@ -618,16 +618,16 @@
       },
       "issue_severity": "LOW",
       "issue_text": "Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.",
-      "line_number": 753,
+      "line_number": 760,
       "line_range": [
-        753
+        760
       ],
       "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b101_assert_used.html",
       "test_id": "B101",
       "test_name": "assert_used"
     },
     {
-      "code": "841         self._ensure()\n842         assert self._ft is not None and self._vec is not None\n843         log.info(\n",
+      "code": "848         self._ensure()\n849         assert self._ft is not None and self._vec is not None\n850         log.info(\n",
       "col_offset": 8,
       "end_col_offset": 61,
       "filename": "src/filesystem_rag_mcp/server.py",
@@ -638,38 +638,18 @@
       },
       "issue_severity": "LOW",
       "issue_text": "Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.",
-      "line_number": 842,
+      "line_number": 849,
       "line_range": [
-        842
+        849
       ],
       "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b101_assert_used.html",
       "test_id": "B101",
       "test_name": "assert_used"
     },
     {
-      "code": "890         self._ensure()\n891         assert self._engine is not None\n892         for hit in self._engine.ft.search(f\"chunk_id:{chunk_id}\", top_k=1):\n",
+      "code": "897         self._ensure()\n898         assert self._engine is not None\n899         for hit in self._engine.ft.search(f\"chunk_id:{chunk_id}\", top_k=1):\n",
       "col_offset": 8,
       "end_col_offset": 39,
-      "filename": "src/filesystem_rag_mcp/server.py",
-      "issue_confidence": "HIGH",
-      "issue_cwe": {
-        "id": 703,
-        "link": "https://cwe.mitre.org/data/definitions/703.html"
-      },
-      "issue_severity": "LOW",
-      "issue_text": "Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.",
-      "line_number": 891,
-      "line_range": [
-        891
-      ],
-      "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b101_assert_used.html",
-      "test_id": "B101",
-      "test_name": "assert_used"
-    },
-    {
-      "code": "897         # Fallback: vector store via document lookup\n898         assert self._vec is not None\n899         result = self._vec._collection.get(ids=[chunk_id], include=[\"documents\", \"metadatas\"])\n",
-      "col_offset": 8,
-      "end_col_offset": 36,
       "filename": "src/filesystem_rag_mcp/server.py",
       "issue_confidence": "HIGH",
       "issue_cwe": {
@@ -687,7 +667,27 @@
       "test_name": "assert_used"
     },
     {
-      "code": "1209         self._ensure()\n1210         assert self._ft is not None and self._vec is not None\n1211 \n",
+      "code": "904         # Fallback: vector store via document lookup\n905         assert self._vec is not None\n906         result = self._vec._collection.get(ids=[chunk_id], include=[\"documents\", \"metadatas\"])\n",
+      "col_offset": 8,
+      "end_col_offset": 36,
+      "filename": "src/filesystem_rag_mcp/server.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 703,
+        "link": "https://cwe.mitre.org/data/definitions/703.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.",
+      "line_number": 905,
+      "line_range": [
+        905
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b101_assert_used.html",
+      "test_id": "B101",
+      "test_name": "assert_used"
+    },
+    {
+      "code": "1215         self._ensure()\n1216         assert self._ft is not None and self._vec is not None\n1217 \n",
       "col_offset": 8,
       "end_col_offset": 61,
       "filename": "src/filesystem_rag_mcp/server.py",
@@ -698,16 +698,16 @@
       },
       "issue_severity": "LOW",
       "issue_text": "Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.",
-      "line_number": 1210,
+      "line_number": 1216,
       "line_range": [
-        1210
+        1216
       ],
       "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b101_assert_used.html",
       "test_id": "B101",
       "test_name": "assert_used"
     },
     {
-      "code": "1242         self._ensure()\n1243         assert self._ft is not None\n1244         all_hits = self._ft.search(f'rel_path:\"{rel_path}\"', top_k=200)\n",
+      "code": "1248         self._ensure()\n1249         assert self._ft is not None\n1250         all_hits = self._ft.search(f'rel_path:\"{rel_path}\"', top_k=200)\n",
       "col_offset": 8,
       "end_col_offset": 35,
       "filename": "src/filesystem_rag_mcp/server.py",
@@ -718,16 +718,16 @@
       },
       "issue_severity": "LOW",
       "issue_text": "Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.",
-      "line_number": 1243,
+      "line_number": 1249,
       "line_range": [
-        1243
+        1249
       ],
       "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b101_assert_used.html",
       "test_id": "B101",
       "test_name": "assert_used"
     },
     {
-      "code": "1310             self._ensure()\n1311             assert self._engine is not None\n1312             orchestrator = ContextOrchestrator(self._engine)\n",
+      "code": "1316             self._ensure()\n1317             assert self._engine is not None\n1318             orchestrator = ContextOrchestrator(self._engine)\n",
       "col_offset": 12,
       "end_col_offset": 43,
       "filename": "src/filesystem_rag_mcp/server.py",
@@ -738,16 +738,16 @@
       },
       "issue_severity": "LOW",
       "issue_text": "Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.",
-      "line_number": 1311,
+      "line_number": 1317,
       "line_range": [
-        1311
+        1317
       ],
       "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b101_assert_used.html",
       "test_id": "B101",
       "test_name": "assert_used"
     },
     {
-      "code": "1348             self._ensure()\n1349             assert self._engine is not None\n1350             orchestrator = ContextOrchestrator(self._engine)\n",
+      "code": "1354             self._ensure()\n1355             assert self._engine is not None\n1356             orchestrator = ContextOrchestrator(self._engine)\n",
       "col_offset": 12,
       "end_col_offset": 43,
       "filename": "src/filesystem_rag_mcp/server.py",
@@ -758,16 +758,16 @@
       },
       "issue_severity": "LOW",
       "issue_text": "Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.",
-      "line_number": 1349,
+      "line_number": 1355,
       "line_range": [
-        1349
+        1355
       ],
       "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b101_assert_used.html",
       "test_id": "B101",
       "test_name": "assert_used"
     },
     {
-      "code": "1540             self._ensure()\n1541             assert self._ft is not None and self._vec is not None\n1542             text_count = self._ft.count()\n",
+      "code": "1546             self._ensure()\n1547             assert self._ft is not None and self._vec is not None\n1548             text_count = self._ft.count()\n",
       "col_offset": 12,
       "end_col_offset": 65,
       "filename": "src/filesystem_rag_mcp/server.py",
@@ -778,16 +778,16 @@
       },
       "issue_severity": "LOW",
       "issue_text": "Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.",
-      "line_number": 1541,
+      "line_number": 1547,
       "line_range": [
-        1541
+        1547
       ],
       "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b101_assert_used.html",
       "test_id": "B101",
       "test_name": "assert_used"
     },
     {
-      "code": "1543             vector_count = self._vec.count()\n1544         except Exception:\n1545             pass\n1546 \n",
+      "code": "1549             vector_count = self._vec.count()\n1550         except Exception:\n1551             pass\n1552 \n",
       "col_offset": 8,
       "end_col_offset": 16,
       "filename": "src/filesystem_rag_mcp/server.py",
@@ -798,17 +798,17 @@
       },
       "issue_severity": "LOW",
       "issue_text": "Try, Except, Pass detected.",
-      "line_number": 1544,
+      "line_number": 1550,
       "line_range": [
-        1544,
-        1545
+        1550,
+        1551
       ],
       "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html",
       "test_id": "B110",
       "test_name": "try_except_pass"
     },
     {
-      "code": "1566             self._ensure()\n1567             assert self._ft is not None and self._vec is not None\n1568             text_count = self._ft.count()\n",
+      "code": "1572             self._ensure()\n1573             assert self._ft is not None and self._vec is not None\n1574             text_count = self._ft.count()\n",
       "col_offset": 12,
       "end_col_offset": 65,
       "filename": "src/filesystem_rag_mcp/server.py",
@@ -819,16 +819,16 @@
       },
       "issue_severity": "LOW",
       "issue_text": "Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.",
-      "line_number": 1567,
+      "line_number": 1573,
       "line_range": [
-        1567
+        1573
       ],
       "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b101_assert_used.html",
       "test_id": "B101",
       "test_name": "assert_used"
     },
     {
-      "code": "1569             vector_count = self._vec.count()\n1570         except Exception:\n1571             pass\n1572         return {\n",
+      "code": "1575             vector_count = self._vec.count()\n1576         except Exception:\n1577             pass\n1578         return {\n",
       "col_offset": 8,
       "end_col_offset": 16,
       "filename": "src/filesystem_rag_mcp/server.py",
@@ -839,10 +839,10 @@
       },
       "issue_severity": "LOW",
       "issue_text": "Try, Except, Pass detected.",
-      "line_number": 1570,
+      "line_number": 1576,
       "line_range": [
-        1570,
-        1571
+        1576,
+        1577
       ],
       "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html",
       "test_id": "B110",
@@ -889,6 +889,27 @@
       "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b112_try_except_continue.html",
       "test_id": "B112",
       "test_name": "try_except_continue"
+    },
+    {
+      "code": "73                 _hf_logging.set_verbosity_error()  # type: ignore[no-untyped-call]\n74             except Exception:\n75                 pass\n76 \n",
+      "col_offset": 12,
+      "end_col_offset": 20,
+      "filename": "src/filesystem_rag_mcp/vector.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 703,
+        "link": "https://cwe.mitre.org/data/definitions/703.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "Try, Except, Pass detected.",
+      "line_number": 74,
+      "line_range": [
+        74,
+        75
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html",
+      "test_id": "B110",
+      "test_name": "try_except_pass"
     }
   ]
 }
