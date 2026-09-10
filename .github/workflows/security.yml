@@ -97,6 +97,26 @@ jobs:
         # without a fix available). This is the right default for a
         # security job: surfaces known issues immediately so they can't
         # be silently deferred. Triage happens via follow-up commits.
+        #
+        # `--ignore-vuln` carries the four unpatched chromadb CVEs that
+        # the project is currently tracking as non-applicable. Each one
+        # affects chromadb's server-side features (multi-tenant auth
+        # bypass, model-repo code injection); this project uses chromadb
+        # ONLY as an embedded single-tenant client via `PersistentClient`
+        # and never exposes the HTTP server, never sets `trust_remote_code`,
+        # and never configures tenants. Re-evaluate this ignore list on
+        # every chromadb bump and re-open if a CVE affects the client
+        # library or the embedded-mode storage path.
         run: |
           uv export --no-hashes --output-file /tmp/requirements.txt
-          uv tool run --from pip-audit pip-audit -r /tmp/requirements.txt --strict
+          # Drop the `-e .` line; filesystem-rag-mcp is the local project
+          # and isn't a real PyPI package, so pip-audit can't audit it.
+          # --skip-editable handles this for some setups but the project's
+          # own pyproject.toml name (filesystem-rag-mcp) is still looked
+          # up on PyPI and fails the job, so we strip the line ourselves.
+          sed -i '/^-e \.$/d' /tmp/requirements.txt
+          uv tool run --from pip-audit pip-audit -r /tmp/requirements.txt --strict \
+            --ignore-vuln PYSEC-2026-311 \
+            --ignore-vuln CVE-2026-45830 \
+            --ignore-vuln CVE-2026-45831 \
+            --ignore-vuln CVE-2026-45833
