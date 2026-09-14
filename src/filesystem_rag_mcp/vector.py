@@ -11,6 +11,7 @@ we never mix vectors from different models in the same collection.
 
 from __future__ import annotations
 
+import contextlib
 from collections.abc import Iterable
 from typing import Any, ClassVar, cast
 
@@ -21,6 +22,39 @@ from .indexing import Chunk
 from .logging_setup import get_logger
 
 log = get_logger("vector")
+
+
+def configure_hardware_threads() -> tuple[int, int]:
+    """Configure CPU thread pinning for inference efficiency on host AMD Ryzen 5 5600XT or foreign CPUs.
+
+    Sets intra_op_num_threads = 6 (matching physical cores) and inter_op_num_threads = 1
+    to avoid hyperthreading contention and prevent workstation micro-stutters.
+    """
+    import os
+
+    cpu_count = os.cpu_count() or 6
+    intra_threads = min(6, max(1, cpu_count // 2 if cpu_count > 6 else cpu_count))
+    inter_threads = 1
+
+    os.environ.setdefault("OMP_NUM_THREADS", str(intra_threads))
+    os.environ.setdefault("MKL_NUM_THREADS", str(intra_threads))
+    os.environ.setdefault("OPENBLAS_NUM_THREADS", str(intra_threads))
+    os.environ.setdefault("VECLIB_MAXIMUM_THREADS", str(intra_threads))
+    os.environ.setdefault("NUMEXPR_NUM_THREADS", str(intra_threads))
+
+    try:
+        import torch
+
+        torch.set_num_threads(intra_threads)
+        torch.set_num_interop_threads(inter_threads)
+    except Exception:
+        pass
+
+    return intra_threads, inter_threads
+
+
+# Apply thread configuration at import time
+configure_hardware_threads()
 
 
 class VectorHit(BaseModel):
@@ -40,6 +74,7 @@ class VectorHit(BaseModel):
     end: int = Field(description="Char offset one past the chunk's last char")
     text: str = Field(description="Chunk text used for embedding")
     score: float = Field(description="Cosine similarity in [0, 1] for normalized vectors")
+    breadcrumbs: str = Field(default="", description="Hierarchical heading breadcrumb lineage")
 
 
 class Embedder:
@@ -90,6 +125,12 @@ class Embedder:
     def is_available(self) -> bool:
         return self._model is not None and not self._offline_unavailable
 
+    def warm_up(self) -> None:
+        """Prime CPU caches and compile transformer execution graphs."""
+        if self.is_available():
+            with contextlib.suppress(Exception):
+                self.embed(["Synthetic warmup probe for model cache priming."])
+
     def embed(self, texts: list[str]) -> list[list[float]]:
         if not texts or self._model is None:
             return [[0.0] * self.settings.embedding_dim for _ in texts]
@@ -120,33 +161,42 @@ class VectorStore:
             metadata={"hnsw:space": "cosine"},
         )
 
-    def upsert(self, chunks: Iterable[Chunk]) -> None:
+    def warm_up(self) -> None:
+        """Warm up embedding graph and prime CPU cache."""
+        self.embedder.warm_up()
+
+    def upsert(self, chunks: Iterable[Chunk], batch_size: int = 32) -> None:
         chunks = list(chunks)
         if not chunks:
             return
-        ids = [c.chunk_id for c in chunks]
-        docs = [c.text for c in chunks]
-        metas = [
-            {
-                "rel_path": c.rel_path,
-                "file_path": c.file_path,
-                "start": c.start,
-                "end": c.end,
-            }
-            for c in chunks
-        ]
-        embs = self.embedder.embed(docs)
-        # Chroma wants lists, not tuples; the IDs must be unique.
-        # We de-duplicate by chunk_id, preferring the latest occurrence.
-        unique: dict[str, tuple[str, str, dict[str, Any], list[float]]] = {}
-        for cid, doc, meta, emb in zip(ids, docs, metas, embs):
-            unique[cid] = (cid, doc, meta, emb)
-        self._collection.upsert(
-            ids=[v[0] for v in unique.values()],
-            documents=[v[1] for v in unique.values()],
-            metadatas=cast(Any, [v[2] for v in unique.values()]),
-            embeddings=cast(Any, [v[3] for v in unique.values()]),
-        )
+
+        # Batch upserts to avoid memory ballooning during large ingestion runs
+        for i in range(0, len(chunks), batch_size):
+            batch = chunks[i : i + batch_size]
+            ids = [c.chunk_id for c in batch]
+            docs = [c.text for c in batch]
+            metas = [
+                {
+                    "rel_path": c.rel_path,
+                    "file_path": c.file_path,
+                    "start": c.start,
+                    "end": c.end,
+                    "breadcrumbs": getattr(c, "breadcrumbs", "") or "",
+                }
+                for c in batch
+            ]
+            embs = self.embedder.embed(docs)
+            # Chroma wants lists, not tuples; the IDs must be unique.
+            # We de-duplicate by chunk_id, preferring the latest occurrence.
+            unique: dict[str, tuple[str, str, dict[str, Any], list[float]]] = {}
+            for cid, doc, meta, emb in zip(ids, docs, metas, embs):
+                unique[cid] = (cid, doc, meta, emb)
+            self._collection.upsert(
+                ids=[v[0] for v in unique.values()],
+                documents=[v[1] for v in unique.values()],
+                metadatas=cast(Any, [v[2] for v in unique.values()]),
+                embeddings=cast(Any, [v[3] for v in unique.values()]),
+            )
 
     def delete_by_rel_path(self, rel_path: str) -> None:
         self._collection.delete(where={"rel_path": rel_path})
@@ -184,6 +234,7 @@ class VectorStore:
             end_val = meta.get("end", 0)
             start_int = int(start_val) if isinstance(start_val, (int, str, float)) else 0
             end_int = int(end_val) if isinstance(end_val, (int, str, float)) else 0
+            breadcrumbs = str(meta.get("breadcrumbs", "") or "")
             out.append(
                 VectorHit(
                     chunk_id=cid,
@@ -193,6 +244,7 @@ class VectorStore:
                     end=end_int,
                     text=str(doc),
                     score=sim,
+                    breadcrumbs=breadcrumbs,
                 )
             )
         return out

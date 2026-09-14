@@ -13,6 +13,7 @@ with cosine-similarity vector scores (which live in [-1, 1], typically
 
 from __future__ import annotations
 
+import contextlib
 from collections.abc import Iterable
 from typing import ClassVar
 
@@ -32,6 +33,7 @@ SCHEMA = Schema(
     rel_path=ID(stored=True),
     file_path=ID(stored=True),
     text=TEXT(stored=True, analyzer=StemmingAnalyzer()),
+    breadcrumbs=TEXT(stored=True, analyzer=StemmingAnalyzer()),
     start=NUMERIC(stored=True),
     end=NUMERIC(stored=True),
 )
@@ -55,6 +57,7 @@ class TextHit(BaseModel):
     end: int = Field(description="Char offset one past the chunk's last char")
     text: str = Field(description="Chunk text matched by the query")
     score: float = Field(description="Normalized score in [0, 1]")
+    breadcrumbs: str = Field(default="", description="Hierarchical heading breadcrumb lineage")
 
 
 class FullTextStore:
@@ -78,11 +81,18 @@ class FullTextStore:
                     rel_path=chunk.rel_path,
                     file_path=chunk.file_path,
                     text=chunk.text,
+                    breadcrumbs=getattr(chunk, "breadcrumbs", "") or "",
                     start=chunk.start,
                     end=chunk.end,
                 )
         finally:
             writer.commit()
+
+    def optimize(self) -> None:
+        """Compact index segments into a single balanced segment."""
+        writer = self._ix.writer()
+        with contextlib.suppress(Exception):
+            writer.commit(optimize=True)
 
     def delete_by_rel_path(self, rel_path: str) -> None:
         writer = self._ix.writer()
@@ -120,7 +130,9 @@ class FullTextStore:
         if not query.strip():
             return []
         with self._ix.searcher() as s:
-            parser = MultifieldParser(["text", "rel_path"], schema=self._ix.schema, group=OrGroup)
+            parser = MultifieldParser(
+                ["text", "breadcrumbs", "rel_path"], schema=self._ix.schema, group=OrGroup
+            )
             if fuzzy:
                 parser.add_plugin(FuzzyTermPlugin())
                 # Append ~1 fuzzy operator to single terms if not already present
@@ -180,4 +192,5 @@ def _normalize_hit(searcher: object, hit: Hit) -> TextHit:
         end=int(hit["end"]),
         text=hit["text"],
         score=norm,
+        breadcrumbs=hit.get("breadcrumbs", "") or "",
     )

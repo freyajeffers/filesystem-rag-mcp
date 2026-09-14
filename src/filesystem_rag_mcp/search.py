@@ -36,6 +36,22 @@ def _get_ranker() -> Any:
     return _ranker_instance if _ranker_instance is not False else None
 
 
+def warm_up_ranker() -> None:
+    """Prime cross-encoder neural reranker weights and execution graphs."""
+    ranker = _get_ranker()
+    if ranker is not None:
+        try:
+            from flashrank import RerankRequest
+
+            req = RerankRequest(
+                query="warmup probe",
+                passages=[{"id": "warmup_0", "text": "Synthetic warmup candidate text"}],
+            )
+            ranker.rerank(req)
+        except Exception:
+            pass
+
+
 class SearchHit(BaseModel):
     """A single hybrid (text + vector) search result returned to MCP callers.
 
@@ -53,6 +69,7 @@ class SearchHit(BaseModel):
     end: int = Field(description="Char offset one past the chunk's last char")
     text: str = Field(description="Chunk text used for embedding / matching")
     score: float = Field(description="Hybrid or reranked score; higher is better")
+    breadcrumbs: str = Field(default="", description="Hierarchical heading breadcrumb lineage")
     sources: tuple[str, ...] = Field(
         description=(
             "Provenance tags naming which indexes contributed to this hit; "
@@ -125,6 +142,7 @@ class SearchEngine:
                 start=h.start,
                 end=h.end,
                 text=h.text,
+                breadcrumbs=h.breadcrumbs,
             )
             sources.setdefault(h.chunk_id, []).append("text")
 
@@ -136,13 +154,14 @@ class SearchEngine:
                 start=vh.start,
                 end=vh.end,
                 text=vh.text,
+                breadcrumbs=vh.breadcrumbs,
             )
             sources.setdefault(vh.chunk_id, []).append("vector")
 
         if not scores:
             return []
 
-        # Top candidate pool
+        # Top candidate pool: cut to top 20 candidates for cross-encoder reranking
         pool_size = max(k * 2, 20)
         top_candidates = sorted(scores.items(), key=lambda kv: kv[1], reverse=True)[:pool_size]
 
@@ -151,6 +170,8 @@ class SearchEngine:
             ranker = _get_ranker()
             if ranker is not None:
                 try:
+                    import math
+
                     from flashrank import RerankRequest
 
                     passages = [{"id": cid, "text": meta[cid].text} for cid, _ in top_candidates]
@@ -161,6 +182,11 @@ class SearchEngine:
                     for item in reranked[:k]:
                         cid = item["id"]
                         m = meta[cid]
+                        raw_score = float(item.get("score", 0.0))
+                        # Calibrate score into probability space via sigmoid
+                        calibrated_score = (
+                            1.0 / (1.0 + math.exp(-raw_score)) if raw_score < 0 else raw_score
+                        )
                         out.append(
                             SearchHit(
                                 chunk_id=cid,
@@ -169,7 +195,8 @@ class SearchEngine:
                                 start=m.start,
                                 end=m.end,
                                 text=m.text,
-                                score=float(item.get("score", 0.0)),
+                                score=calibrated_score,
+                                breadcrumbs=m.breadcrumbs,
                                 sources=(*sources.get(cid, []), "rerank"),
                             )
                         )
@@ -191,6 +218,7 @@ class SearchEngine:
                     end=m.end,
                     text=m.text,
                     score=score,
+                    breadcrumbs=m.breadcrumbs,
                     sources=tuple(sources.get(cid, [])),
                 )
             )
@@ -204,3 +232,4 @@ class _HitMeta:
     start: int
     end: int
     text: str
+    breadcrumbs: str = ""

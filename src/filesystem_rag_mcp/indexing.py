@@ -20,24 +20,15 @@ from typing import Any, ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .config import Settings
+from .config import Settings, get_profile_config
 from .converter import convert_file_to_markdown
-from .security import is_indexable_file, safe_resolve
+from .security import is_editor_artifact, is_indexable_file, safe_resolve
 from .semantic_chunker import semantic_chunk_text
 
 
 @dataclass(slots=True, frozen=True)
 class Chunk:
-    """A single piece of a file, ready to be embedded and indexed.
-
-    Kept as `@dataclass(slots=True, frozen=True)` rather than Pydantic because
-    a single indexing pass constructs thousands of these (one per chunk
-    across every file in the root tree) and Pydantic's runtime validation
-    adds measurable overhead in that hot loop. The trade-off is that this
-    type doesn't get free JSON Schema generation; callers that need to
-    emit a chunk externally should wrap it (e.g. `ChunkSchema(**dataclasses.asdict(c))`)
-    before serializing.
-    """
+    """A single piece of a file, ready to be embedded and indexed."""
 
     chunk_id: str
     file_path: str  # absolute, validated path
@@ -45,6 +36,7 @@ class Chunk:
     start: int  # char offset where chunk text begins in file
     end: int  # char offset where chunk text ends (exclusive)
     text: str
+    breadcrumbs: str = ""
 
     @property
     def length(self) -> int:
@@ -71,12 +63,15 @@ def discover_files(settings: Settings) -> list[FileMeta]:
     """Walk `settings.root_dir`, returning text files only.
 
     Symlinks that escape root are skipped. Files larger than
-    `settings.max_file_bytes` are skipped. Non-text files are skipped.
+    `settings.max_file_bytes` are skipped. Non-text files and editor artifacts are skipped.
+    If the active profile enforces allowed extensions (e.g. notes profile),
+    only files matching those extensions are returned.
     Output is sorted by relative path for determinism.
     """
     root = settings.root_dir.resolve()
     out: list[FileMeta] = []
     ignore_patterns = settings.ignore_globs
+    profile_cfg = get_profile_config(settings.profile)
 
     def _is_ignored(p: Path) -> bool:
         rel = str(p.relative_to(root))
@@ -85,7 +80,7 @@ def discover_files(settings: Settings) -> list[FileMeta]:
     for path in sorted(root.rglob("*")):
         if not path.is_file():
             continue
-        if _is_ignored(path):
+        if is_editor_artifact(path) or _is_ignored(path):
             continue
         try:
             resolved = path.resolve(strict=True)
@@ -93,6 +88,13 @@ def discover_files(settings: Settings) -> list[FileMeta]:
             continue
         if safe_resolve(root, resolved) != resolved:
             # symlink that escapes root
+            continue
+        if is_editor_artifact(resolved):
+            continue
+        if (
+            profile_cfg.allowed_extensions is not None
+            and resolved.suffix.lower() not in profile_cfg.allowed_extensions
+        ):
             continue
         try:
             st = resolved.stat()
@@ -205,8 +207,10 @@ def chunk_file(file_meta: FileMeta, settings: Settings) -> list[Chunk]:
         text, chunk_size=settings.chunk_size, overlap=settings.chunk_overlap
     )
     out: list[Chunk] = []
-    for start, end, body in raw_chunks:
-        cid = _chunk_id(file_meta, start, end, body)
+    for raw in raw_chunks:
+        start, end, body = raw[0], raw[1], raw[2]
+        breadcrumbs = getattr(raw, "breadcrumbs", "") or ""
+        cid = _chunk_id(file_meta, start, end, body, breadcrumbs)
         out.append(
             Chunk(
                 chunk_id=cid,
@@ -215,12 +219,13 @@ def chunk_file(file_meta: FileMeta, settings: Settings) -> list[Chunk]:
                 start=start,
                 end=end,
                 text=body,
+                breadcrumbs=breadcrumbs,
             )
         )
     return out
 
 
-def _chunk_id(file_meta: FileMeta, start: int, end: int, body: str) -> str:
+def _chunk_id(file_meta: FileMeta, start: int, end: int, body: str, breadcrumbs: str = "") -> str:
     """Stable, content-aware chunk id."""
     h = hashlib.sha256()
     h.update(file_meta.sha256.encode())
@@ -229,6 +234,9 @@ def _chunk_id(file_meta: FileMeta, start: int, end: int, body: str) -> str:
     h.update(b"|")
     h.update(str(end).encode())
     h.update(b"|")
+    if breadcrumbs:
+        h.update(breadcrumbs.encode("utf-8", errors="replace"))
+        h.update(b"|")
     h.update(body[:64].encode("utf-8", errors="replace"))
     return h.hexdigest()[:24]
 
