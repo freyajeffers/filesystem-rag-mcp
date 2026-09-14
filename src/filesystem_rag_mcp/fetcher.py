@@ -105,8 +105,11 @@ def fetch_json_data(
         if not content:
             return {"success": True, "result": None}
 
-        # Handle JSONL
-        if "\n" in content and not content.startswith("["):
+        # First try parsing as a single standard JSON object/array
+        try:
+            parsed_data = json.loads(content)
+        except json.JSONDecodeError:
+            # Fallback to line-by-line JSONL
             lines = [line.strip() for line in content.splitlines() if line.strip()]
             items = []
             for line in lines[:max_items]:
@@ -115,8 +118,6 @@ def fetch_json_data(
                 except Exception:
                     continue
             parsed_data = items
-        else:
-            parsed_data = json.loads(content)
 
         extracted = _resolve_json_path(parsed_data, path_expr) if path_expr else parsed_data
 
