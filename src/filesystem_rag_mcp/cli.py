@@ -31,7 +31,16 @@ log = get_logger(__name__)
 # Subcommand dispatch
 # ---------------------------------------------------------------------------
 
-_SUBCOMMANDS = ("doctor", "search", "stats", "index")
+_SUBCOMMANDS = (
+    "doctor",
+    "search",
+    "stats",
+    "index",
+    "service",
+    "benchmark",
+    "optimize",
+    "maintenance",
+)
 
 
 def _argv_uses_subcommand(argv: list[str]) -> str | None:
@@ -125,6 +134,53 @@ def _build_subcommand_parser(prog: str) -> argparse.ArgumentParser:
         "--data-dir", type=Path, default=Path(os.environ.get("FSRAG_DATA_DIR", ".fsrag"))
     )
     p_index.add_argument("--json", action="store_true", dest="as_json")
+
+    # service --------------------------------------------------------------
+    p_service = sub_p.add_parser(
+        "service",
+        help="Manage background systemd user service and timers on Linux",
+    )
+    p_service.add_argument(
+        "service_action",
+        choices=["install", "start", "stop", "restart", "status"],
+        help="Service management action",
+    )
+    p_service.add_argument(
+        "--profile",
+        default=os.environ.get("FSRAG_PROFILE", "codebase"),
+        help="Workload profile ('notes' or 'codebase')",
+    )
+    p_service.add_argument(
+        "--root-dir", type=Path, default=Path(os.environ.get("FSRAG_ROOT_DIR", "."))
+    )
+    p_service.add_argument(
+        "--data-dir", type=Path, default=Path(os.environ.get("FSRAG_DATA_DIR", ".fsrag"))
+    )
+    p_service.add_argument("--json", action="store_true", dest="as_json")
+
+    # benchmark ------------------------------------------------------------
+    p_bench = sub_p.add_parser(
+        "benchmark",
+        help="Execute retrieval quality evaluation and regression gates",
+    )
+    p_bench.add_argument(
+        "--dataset",
+        type=Path,
+        default=None,
+        help="Path to custom evaluation dataset JSON (default: tests/data/evaluation_dataset.json)",
+    )
+    p_bench.add_argument("--json", action="store_true", dest="as_json")
+
+    # optimize / maintenance -----------------------------------------------
+    for opt_name in ("optimize", "maintenance"):
+        p_opt = sub_p.add_parser(
+            opt_name,
+            help="Run SQLite incremental vacuuming, FTS5 segment compaction, and integrity checks",
+        )
+        p_opt.add_argument(
+            "--data-dir", type=Path, default=Path(os.environ.get("FSRAG_DATA_DIR", ".fsrag"))
+        )
+        p_opt.add_argument("--json", action="store_true", dest="as_json")
 
     return parser
 
@@ -317,6 +373,173 @@ def _run_index(args: argparse.Namespace) -> int:
     return _run_index_async(args)
 
 
+def _run_service(args: argparse.Namespace) -> int:
+    import subprocess
+
+    action = args.service_action
+    user_unit_dir = Path.home() / ".config" / "systemd" / "user"
+
+    if action == "install":
+        user_unit_dir.mkdir(parents=True, exist_ok=True)
+        service_file = user_unit_dir / "mcp-rag-watcher.service"
+        timer_file = user_unit_dir / "mcp-rag-maintenance.timer"
+        maint_service_file = user_unit_dir / "mcp-rag-maintenance.service"
+
+        service_content = f"""[Unit]
+Description=Filesystem RAG MCP Background Watcher Daemon
+Documentation=https://github.com/freyajeffers/filesystem-rag-mcp
+After=default.target
+Wants=default.target
+
+[Service]
+Type=simple
+ExecStart={sys.executable} -m filesystem_rag_mcp.watcher
+WorkingDirectory={args.root_dir.resolve()}
+Environment=PYTHONUNBUFFERED=1
+Environment=FSRAG_PROFILE={args.profile}
+Environment=FSRAG_ROOT_DIR={args.root_dir.resolve()}
+Environment=FSRAG_DATA_DIR={args.data_dir.resolve()}
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=default.target
+"""
+        timer_content = """[Unit]
+Description=Weekly Filesystem RAG Storage Maintenance Timer
+Documentation=https://github.com/freyajeffers/filesystem-rag-mcp
+
+[Timer]
+OnCalendar=Sun *-*-* 03:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+"""
+        maint_content = f"""[Unit]
+Description=Filesystem RAG Storage Maintenance Service
+Documentation=https://github.com/freyajeffers/filesystem-rag-mcp
+
+[Service]
+Type=oneshot
+ExecStart={sys.executable} -m filesystem_rag_mcp.cli optimize --data-dir {args.data_dir.resolve()}
+"""
+        service_file.write_text(service_content, encoding="utf-8")
+        timer_file.write_text(timer_content, encoding="utf-8")
+        maint_service_file.write_text(maint_content, encoding="utf-8")
+
+        subprocess.run(["systemctl", "--user", "daemon-reload"], check=False, capture_output=True)
+        subprocess.run(
+            ["systemctl", "--user", "enable", "mcp-rag-watcher.service"],
+            check=False,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["systemctl", "--user", "enable", "mcp-rag-maintenance.timer"],
+            check=False,
+            capture_output=True,
+        )
+
+        res = {
+            "ok": True,
+            "action": "install",
+            "service_file": str(service_file),
+            "timer_file": str(timer_file),
+            "maintenance_service_file": str(maint_service_file),
+            "status": "installed and enabled",
+        }
+        if getattr(args, "as_json", False):
+            print(json.dumps(res, indent=2))
+        else:
+            print("Systemd user service installed successfully:")
+            print(f"  Service: {service_file}")
+            print(f"  Timer:   {timer_file}")
+            print("To start: systemctl --user start mcp-rag-watcher.service")
+            print("To inspect: journalctl --user -u mcp-rag-watcher.service -f")
+        return 0
+
+    if action in {"start", "stop", "restart", "status"}:
+        cmd = ["systemctl", "--user", action, "mcp-rag-watcher.service"]
+        proc = subprocess.run(cmd, capture_output=True, text=True)
+        if getattr(args, "as_json", False):
+            print(
+                json.dumps(
+                    {
+                        "action": action,
+                        "exit_code": proc.returncode,
+                        "stdout": proc.stdout.strip(),
+                        "stderr": proc.stderr.strip(),
+                    },
+                    indent=2,
+                )
+            )
+        else:
+            if proc.stdout.strip():
+                print(proc.stdout.strip())
+            if proc.stderr.strip():
+                print(proc.stderr.strip(), file=sys.stderr)
+        return proc.returncode
+
+    return 1
+
+
+def _run_benchmark(args: argparse.Namespace) -> int:
+    from .benchmark import run_benchmark
+
+    try:
+        report = run_benchmark(dataset_path=getattr(args, "dataset", None))
+    except Exception as exc:
+        if getattr(args, "as_json", False):
+            print(json.dumps({"ok": False, "error": str(exc)}, indent=2))
+        else:
+            print(f"Benchmark error: {exc}", file=sys.stderr)
+        return 1
+
+    if getattr(args, "as_json", False):
+        print(json.dumps(report.model_dump(), indent=2))
+    else:
+        print("=" * 72)
+        print("  filesystem-rag-mcp Retrieval Quality Benchmark Report")
+        print("=" * 72)
+        print(f"  {'Mode':<36} | {'MRR@5':<8} | {'Hit@1':<8} | {'Avg Lat':<8} | {'p95 Lat':<8}")
+        print("-" * 72)
+        for m in report.modes.values():
+            print(
+                f"  {m.mode_name:<36} | {m.mrr_at_5:<8.4f} | {m.hit_at_1:<8.4f} | {m.avg_latency_ms:<6.1f}ms | {m.p95_latency_ms:<6.1f}ms"
+            )
+        print("=" * 72)
+        print(f"  Quality Gate: {'PASSED' if report.quality_gate_passed else 'FAILED'}")
+        print(f"  Latency SLA:  {'PASSED' if report.latency_gate_passed else 'FAILED'}")
+        for detail in report.gate_details:
+            print(f"    - {detail}")
+        print("=" * 72)
+
+    return 0 if report.passed else 1
+
+
+def _run_optimize(args: argparse.Namespace) -> int:
+    from .maintenance import optimize_storage
+
+    settings = Settings(data_dir=args.data_dir.resolve())
+    report = optimize_storage(settings)
+
+    if getattr(args, "as_json", False):
+        print(json.dumps(report.model_dump(), indent=2))
+    else:
+        print("=" * 60)
+        print("  filesystem-rag-mcp Storage Maintenance & Optimization")
+        print("=" * 60)
+        print(f"  Status:             {'SUCCESS' if report.ok else 'WARNING'}")
+        print(f"  Pre-optimize size:  {report.pre_bytes} bytes")
+        print(f"  Post-optimize size: {report.post_bytes} bytes")
+        print(f"  Reclaimed space:    {report.reclaimed_bytes} bytes")
+        print(f"  Integrity Check:    {report.integrity}")
+        print(f"  Duration:           {report.duration_ms:.2f} ms")
+        print("=" * 60)
+
+    return 0 if report.ok else 1
+
+
 # ---------------------------------------------------------------------------
 # Legacy argparse (unchanged)
 # ---------------------------------------------------------------------------
@@ -445,6 +668,12 @@ def main(argv: list[str] | None = None) -> None:
             sys.exit(_run_stats(args))
         if args.command == "index":
             sys.exit(_run_index(args))
+        if args.command == "service":
+            sys.exit(_run_service(args))
+        if args.command == "benchmark":
+            sys.exit(_run_benchmark(args))
+        if args.command in ("optimize", "maintenance"):
+            sys.exit(_run_optimize(args))
         sys.exit(f"Unknown subcommand: {args.command}")
 
     # ---- Legacy flag-based dispatch -----------------------------------

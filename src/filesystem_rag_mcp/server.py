@@ -131,8 +131,75 @@ def build_server(settings: Settings, *, auth_provider: Any | None = None) -> MCP
             "status": "healthy",
             "version": "0.1.0",
             "root_dir": str(settings.root_dir),
+            "profile": settings.profile,
             "workspaces_count": len(state._workspaces),
         }
+
+    @server.tool(
+        name="search_notes",
+        description=(
+            "Search personal Markdown notes with heading breadcrumbs, "
+            "editor artifact exclusion, and neural cross-encoder reranking."
+        ),
+        annotations=ToolAnnotations(read_only_hint=True, open_world_hint=False),
+    )
+    async def search_notes_tool(
+        query: str,
+        top_k: int = 5,
+        alpha: float = 0.5,
+        path_glob: str | None = None,
+        rerank: bool = True,
+        fuzzy: bool = False,
+    ) -> dict[str, Any]:
+        return await state.search(
+            query=query,
+            top_k=top_k,
+            alpha=alpha,
+            path_glob=path_glob,
+            rerank=rerank,
+            fuzzy=fuzzy,
+        )
+
+    @server.tool(
+        name="optimize_database",
+        description="Execute SQLite incremental vacuuming, FTS5 segment optimization, and integrity checks.",
+        annotations=ToolAnnotations(read_only_hint=False, open_world_hint=False),
+    )
+    async def optimize_database_tool() -> dict[str, Any]:
+        from .maintenance import optimize_storage
+
+        report = optimize_storage(settings)
+        return {
+            "success": report.ok,
+            "report": report.model_dump(),
+        }
+
+    @server.tool(
+        name="index_file",
+        description="Immediately index or update a single file in the full-text and vector stores.",
+        annotations=ToolAnnotations(read_only_hint=False, open_world_hint=False),
+    )
+    async def index_file_tool(path: str) -> dict[str, Any]:
+        res: dict[str, Any] = await state.index_single_file(path)
+        return res
+
+    @server.tool(
+        name="reindex_directory",
+        description="Trigger a full directory scan and reconciliation against disk state.",
+        annotations=ToolAnnotations(read_only_hint=False, open_world_hint=False),
+    )
+    async def reindex_directory_tool(full_rebuild: bool = False) -> dict[str, Any]:
+        res: dict[str, Any] = await state.refresh_index(full_rebuild=full_rebuild)
+        return res
+
+    @server.tool(
+        name="get_index_stats",
+        description="Inspect document counts, chunk quantities, storage size, and index sync timestamps.",
+        annotations=ToolAnnotations(read_only_hint=True, open_world_hint=False),
+    )
+    async def get_index_stats_tool() -> dict[str, Any]:
+        res: dict[str, Any] = await state.get_index_status()
+        return res
 
     @server.tool(
         name="search",
@@ -1566,6 +1633,53 @@ class _ServerState:
             "last_refresh_at": self._last_refresh_at,
         }
 
+    async def get_index_status(self) -> dict[str, Any]:
+        """Inspect live background indexing and chunk counts."""
+        return await self.get_indexing_status()
+
+    async def index_single_file(self, path: str) -> dict[str, Any]:
+        """Immediately chunk and index a single file."""
+        import hashlib
+
+        from .indexing import FileMeta, chunk_file
+        from .security import is_indexable_file, safe_resolve
+
+        resolved = safe_resolve(Path(self.settings.root_dir), path)
+        if not resolved.is_file() or not is_indexable_file(
+            resolved, allow_binary=self.settings.index_binary_files
+        ):
+            return {"success": False, "error": f"Path {path!r} is not an indexable file."}
+
+        st = resolved.stat()
+        try:
+            with resolved.open("rb") as fh:
+                digest = hashlib.sha256(fh.read()).hexdigest()
+        except OSError as exc:
+            return {"success": False, "error": f"Failed reading {path!r}: {exc}"}
+
+        fm = FileMeta(
+            abs_path=resolved,
+            rel_path=str(resolved.relative_to(self.settings.root_dir)),
+            size=st.st_size,
+            mtime_ns=st.st_mtime_ns,
+            sha256=digest,
+        )
+
+        chunks = chunk_file(fm, self.settings)
+        self._ensure()
+        assert self._ft is not None and self._vec is not None
+        self._ft.delete_by_rel_path(fm.rel_path)
+        self._ft.upsert(chunks)
+        if self._embedder and self._embedder.is_available():
+            self._vec.delete_by_rel_path(fm.rel_path)
+            self._vec.upsert(chunks)
+
+        return {
+            "success": True,
+            "rel_path": fm.rel_path,
+            "chunks_indexed": len(chunks),
+        }
+
     async def status(self) -> dict[str, Any]:
         text_count = vector_count = 0
         try:
@@ -1669,6 +1783,7 @@ def _hit_to_dict(hit: SearchHit, query: str = "") -> dict[str, Any]:
         "end": hit.end,
         "score": round(hit.score, 6),
         "sources": list(hit.sources),
+        "breadcrumbs": getattr(hit, "breadcrumbs", "") or "",
         "snippet": _snippet(hit.text, query=query),
     }
 

@@ -107,6 +107,10 @@ jobs:
               --root-dir "$CORPUS" --data-dir "$DATA" --json > /tmp/out.json
           python -c "import json; d=json.load(open('/tmp/out.json')); assert isinstance(d, list) and len(d) >= 1, d"
 
+          # optimize: must complete and verify storage integrity
+          uv run filesystem-rag-mcp optimize --data-dir "$DATA" --json > /tmp/maint.json
+          python -c "import json; d=json.load(open('/tmp/maint.json')); assert d['ok'], d"
+
       - name: Run test suite with coverage
         run: |
           uv run pytest -v \

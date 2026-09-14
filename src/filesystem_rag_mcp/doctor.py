@@ -208,6 +208,115 @@ def check_system_tools() -> list[DiagnosticCheck]:
     return checks
 
 
+def check_workload_profile(settings: Settings) -> list[DiagnosticCheck]:
+    from .config import get_profile_config
+    from .indexing import discover_files
+
+    profile_cfg = get_profile_config(settings.profile)
+    checks: list[DiagnosticCheck] = []
+
+    checks.append(
+        DiagnosticCheck(
+            name=f"Workload Profile: {profile_cfg.name}",
+            category="Profile",
+            passed=True,
+            details=f"{profile_cfg.description} (Target: {settings.root_dir})",
+        )
+    )
+
+    try:
+        files = discover_files(settings)
+        checks.append(
+            DiagnosticCheck(
+                name="Indexable Corpus Discovery",
+                category="Profile",
+                passed=True,
+                details=f"Discovered {len(files)} indexable files for profile '{settings.profile}'",
+            )
+        )
+    except Exception as exc:
+        checks.append(
+            DiagnosticCheck(
+                name="Indexable Corpus Discovery",
+                category="Profile",
+                passed=False,
+                details=f"Failed to discover files: {exc}",
+                remediation="Ensure profile root directory exists and has readable files.",
+            )
+        )
+
+    return checks
+
+
+def check_artifact_exclusion() -> DiagnosticCheck:
+    from .security import is_editor_artifact
+
+    samples = [
+        ("test.md", False),
+        (".note.md.swp", True),
+        (".note.md.un~", True),
+        ("notes.tmp", True),
+        (".goutputstream-123", True),
+        ("backup.md~", True),
+    ]
+
+    all_passed = True
+    details_list = []
+    for sample, should_exclude in samples:
+        matched = is_editor_artifact(sample)
+        if matched != should_exclude:
+            all_passed = False
+            details_list.append(f"{sample} expected_artifact={should_exclude} got={matched}")
+
+    if all_passed:
+        return DiagnosticCheck(
+            name="Editor Artifact Exclusion Rules",
+            category="Filesystem",
+            passed=True,
+            details="All editor temporary files (.swp, .un~, *~, .tmp) successfully filtered",
+        )
+    return DiagnosticCheck(
+        name="Editor Artifact Exclusion Rules",
+        category="Filesystem",
+        passed=False,
+        details=f"Filter mismatch: {', '.join(details_list)}",
+        remediation="Check is_editor_artifact pattern definitions in security.py.",
+    )
+
+
+def check_sqlite_wal_capability(data_dir: Path) -> DiagnosticCheck:
+    import sqlite3
+
+    db_path = data_dir.resolve() / ".doctor_wal_test.db"
+    try:
+        conn = sqlite3.connect(str(db_path), timeout=2.0)
+        conn.execute("PRAGMA journal_mode = WAL;")
+        row = conn.execute("PRAGMA journal_mode;").fetchone()
+        conn.close()
+        wal_ok = row is not None and row[0].lower() == "wal"
+        if db_path.exists():
+            db_path.unlink(missing_ok=True)
+        shm = data_dir.resolve() / ".doctor_wal_test.db-shm"
+        wal = data_dir.resolve() / ".doctor_wal_test.db-wal"
+        shm.unlink(missing_ok=True)
+        wal.unlink(missing_ok=True)
+
+        return DiagnosticCheck(
+            name="SQLite WAL Mode Support",
+            category="Filesystem",
+            passed=wal_ok,
+            details="Database path supports SQLite WAL (Write-Ahead Logging) and concurrent transactions",
+        )
+    except Exception as exc:
+        return DiagnosticCheck(
+            name="SQLite WAL Mode Support",
+            category="Filesystem",
+            passed=False,
+            details=f"WAL verification failed: {exc}",
+            remediation="Ensure the data directory is on a local filesystem supporting POSIX locks.",
+        )
+
+
 def run_diagnostics(settings: Settings | None = None) -> tuple[bool, list[DiagnosticCheck]]:
     """Execute all diagnostic checks and return (all_passed, checks)."""
     if settings is None:
@@ -217,12 +326,17 @@ def run_diagnostics(settings: Settings | None = None) -> tuple[bool, list[Diagno
     checks.append(check_python_version())
     checks.append(check_root_directory(settings.root_dir))
     checks.append(check_data_directory(settings.data_dir))
+    checks.append(check_artifact_exclusion())
+    checks.append(check_sqlite_wal_capability(settings.data_dir))
+    checks.extend(check_workload_profile(settings))
     checks.extend(check_core_dependencies())
     checks.extend(check_format_converters())
     checks.extend(check_system_tools())
 
     all_passed = all(
-        c.passed for c in checks if c.category in ("Environment", "Filesystem", "Dependencies")
+        c.passed
+        for c in checks
+        if c.category in ("Environment", "Filesystem", "Dependencies", "Profile")
     )
     return all_passed, checks
 
