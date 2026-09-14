@@ -585,6 +585,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Directory to store indexes, embeddings, and oauth db (default: .fsrag)",
     )
     parser.add_argument(
+        "--profile",
+        default=os.environ.get("FSRAG_PROFILE", "codebase"),
+        help="Active workload profile: 'notes' or 'codebase' (default: codebase)",
+    )
+    parser.add_argument(
         "--host",
         default=os.environ.get("FSRAG_HOST", "127.0.0.1"),
         help="Host to bind for HTTP transport (default: 127.0.0.1)",
@@ -755,6 +760,7 @@ def main(argv: list[str] | None = None) -> None:
     settings = Settings(
         root_dir=args.root_dir.resolve(),
         data_dir=args.data_dir.resolve(),
+        profile=args.profile,
         embedding_model=args.embedding_model,
         auth_required=auth_required,
         oauth_allow_dynamic_registration=allow_dcr,
