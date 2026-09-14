@@ -1,0 +1,202 @@
+{
+  "description": "Curated 25-query retrieval quality benchmark dataset for filesystem-rag-mcp",
+  "documents": [
+    {
+      "rel_path": "docs/architecture/storage.md",
+      "content": "# System Architecture\n\n## Storage Subsystem\n\n### SQLite WAL Configuration\nThe filesystem RAG engine uses SQLite with Write-Ahead Logging (WAL) mode enabled by default. WAL mode permits concurrent reads while a background write transaction is active without database locking.\n\n### Incremental Vacuuming\nTo prevent file fragmentation and page bloat during frequent note editing, incremental vacuuming reclaims unused disk pages."
+    },
+    {
+      "rel_path": "docs/architecture/inference.md",
+      "content": "# System Architecture\n\n## Inference & Hardware Topology\n\n### CPU Thread Pinning\nOn AMD Ryzen 5 5600XT processors with 6 physical Zen 3 cores, intra-op threads are pinned to 6 and inter-op threads to 1 to prevent hyperthreading contention.\n\n### Neural Cross-Encoder Reranking\nThe cross-encoder scores candidate passages using a calibrated sigmoid activation function to project raw logits into probability space."
+    },
+    {
+      "rel_path": "src/auth/oauth_server.py",
+      "content": "class OAuthServer:\n    def __init__(self, issuer_url: str, hmac_secret: str) -> None:\n        self.issuer = issuer_url\n        self.secret = hmac_secret\n\n    def issue_access_token(self, client_id: str, scope: str) -> str:\n        \"\"\"Issue signed JWT access token for authenticated client session.\"\"\"\n        return f'jwt.{client_id}.{scope}'\n\n    def validate_pkce_challenge(self, code_verifier: str, code_challenge: str) -> bool:\n        \"\"\"Verify S256 code challenge against plain verifier.\"\"\"\n        return True\n"
+    },
+    {
+      "rel_path": "src/indexer/content_hasher.py",
+      "content": "import hashlib\n\ndef compute_blake3_digest(filepath: str) -> str:\n    \"\"\"Compute cryptographic hash to short-circuit unchanged documents.\"\"\"\n    hasher = hashlib.sha256()\n    with open(filepath, 'rb') as f:\n        hasher.update(f.read())\n    return hasher.hexdigest()\n\ndef debounce_filesystem_events(delay_ms: int = 500) -> None:\n    \"\"\"Sliding window debounce mechanism to coalesce rapid disk write events.\"\"\"\n    pass\n"
+    },
+    {
+      "rel_path": "notes/meetings/2026_roadmap.md",
+      "content": "# Meeting Notes 2026\n\n## Q3 Product Roadmap\n\n### Performance Objectives\nOur top objective for Q3 is achieving sub-75ms search latency across a corpus of 50,000 personal notes.\n\n### Personal Notes Integration\nSupport markdown vaults with full heading hierarchy breadcrumbs and automatic exclusion of Vim swap files like .swp and .un~."
+    }
+  ],
+  "queries": [
+    {
+      "id": "q01",
+      "category": "Exact Keyword",
+      "query": "PRAGMA journal_mode = WAL",
+      "expected_doc": "docs/architecture/storage.md",
+      "expected_text_substring": "Write-Ahead Logging"
+    },
+    {
+      "id": "q02",
+      "category": "Exact Keyword",
+      "query": "incremental vacuuming",
+      "expected_doc": "docs/architecture/storage.md",
+      "expected_text_substring": "incremental vacuuming"
+    },
+    {
+      "id": "q03",
+      "category": "Exact Keyword",
+      "query": "AMD Ryzen 5 5600XT",
+      "expected_doc": "docs/architecture/inference.md",
+      "expected_text_substring": "Ryzen 5 5600XT"
+    },
+    {
+      "id": "q04",
+      "category": "Exact Keyword",
+      "query": "cross-encoder reranking",
+      "expected_doc": "docs/architecture/inference.md",
+      "expected_text_substring": "cross-encoder"
+    },
+    {
+      "id": "q05",
+      "category": "Exact Keyword",
+      "query": "issue_access_token",
+      "expected_doc": "src/auth/oauth_server.py",
+      "expected_text_substring": "issue_access_token"
+    },
+    {
+      "id": "q06",
+      "category": "Exact Keyword",
+      "query": "compute_blake3_digest",
+      "expected_doc": "src/indexer/content_hasher.py",
+      "expected_text_substring": "compute_blake3_digest"
+    },
+    {
+      "id": "q07",
+      "category": "Conceptual Semantic",
+      "query": "How to handle non-blocking concurrent database writes and reads?",
+      "expected_doc": "docs/architecture/storage.md",
+      "expected_text_substring": "Write-Ahead Logging"
+    },
+    {
+      "id": "q08",
+      "category": "Conceptual Semantic",
+      "query": "Reclaiming unused disk space after file deletions",
+      "expected_doc": "docs/architecture/storage.md",
+      "expected_text_substring": "vacuuming"
+    },
+    {
+      "id": "q09",
+      "category": "Conceptual Semantic",
+      "query": "Optimizing CPU core allocation for machine learning model inference",
+      "expected_doc": "docs/architecture/inference.md",
+      "expected_text_substring": "intra-op threads"
+    },
+    {
+      "id": "q10",
+      "category": "Conceptual Semantic",
+      "query": "Converting neural model logit outputs to calibrated probability scores",
+      "expected_doc": "docs/architecture/inference.md",
+      "expected_text_substring": "sigmoid"
+    },
+    {
+      "id": "q11",
+      "category": "Conceptual Semantic",
+      "query": "Generating authorization credentials and JSON web tokens for clients",
+      "expected_doc": "src/auth/oauth_server.py",
+      "expected_text_substring": "issue_access_token"
+    },
+    {
+      "id": "q12",
+      "category": "Conceptual Semantic",
+      "query": "Verifying PKCE code challenge and verifier parameters",
+      "expected_doc": "src/auth/oauth_server.py",
+      "expected_text_substring": "validate_pkce_challenge"
+    },
+    {
+      "id": "q13",
+      "category": "Conceptual Semantic",
+      "query": "Detecting file modifications without reprocessing unchanged text",
+      "expected_doc": "src/indexer/content_hasher.py",
+      "expected_text_substring": "cryptographic hash"
+    },
+    {
+      "id": "q14",
+      "category": "Conceptual Semantic",
+      "query": "Target search response times and latency SLAs for large knowledge vaults",
+      "expected_doc": "notes/meetings/2026_roadmap.md",
+      "expected_text_substring": "sub-75ms"
+    },
+    {
+      "id": "q15",
+      "category": "Code Syntax & Symbol",
+      "query": "def validate_pkce_challenge",
+      "expected_doc": "src/auth/oauth_server.py",
+      "expected_text_substring": "validate_pkce_challenge"
+    },
+    {
+      "id": "q16",
+      "category": "Code Syntax & Symbol",
+      "query": "class OAuthServer",
+      "expected_doc": "src/auth/oauth_server.py",
+      "expected_text_substring": "OAuthServer"
+    },
+    {
+      "id": "q17",
+      "category": "Code Syntax & Symbol",
+      "query": "def debounce_filesystem_events",
+      "expected_doc": "src/indexer/content_hasher.py",
+      "expected_text_substring": "debounce_filesystem_events"
+    },
+    {
+      "id": "q18",
+      "category": "Code Syntax & Symbol",
+      "query": "hasher = hashlib.sha256()",
+      "expected_doc": "src/indexer/content_hasher.py",
+      "expected_text_substring": "hashlib.sha256"
+    },
+    {
+      "id": "q19",
+      "category": "Code Syntax & Symbol",
+      "query": "code_verifier: str, code_challenge: str",
+      "expected_doc": "src/auth/oauth_server.py",
+      "expected_text_substring": "code_verifier"
+    },
+    {
+      "id": "q20",
+      "category": "Code Syntax & Symbol",
+      "query": "delay_ms: int = 500",
+      "expected_doc": "src/indexer/content_hasher.py",
+      "expected_text_substring": "delay_ms"
+    },
+    {
+      "id": "q21",
+      "category": "Hierarchical Heading",
+      "query": "System Architecture > Storage Subsystem > SQLite WAL Configuration",
+      "expected_doc": "docs/architecture/storage.md",
+      "expected_text_substring": "Write-Ahead Logging"
+    },
+    {
+      "id": "q22",
+      "category": "Hierarchical Heading",
+      "query": "System Architecture > Storage Subsystem > Incremental Vacuuming",
+      "expected_doc": "docs/architecture/storage.md",
+      "expected_text_substring": "vacuuming"
+    },
+    {
+      "id": "q23",
+      "category": "Hierarchical Heading",
+      "query": "System Architecture > Inference & Hardware Topology > CPU Thread Pinning",
+      "expected_doc": "docs/architecture/inference.md",
+      "expected_text_substring": "Thread Pinning"
+    },
+    {
+      "id": "q24",
+      "category": "Hierarchical Heading",
+      "query": "System Architecture > Inference & Hardware Topology > Neural Cross-Encoder Reranking",
+      "expected_doc": "docs/architecture/inference.md",
+      "expected_text_substring": "Cross-Encoder"
+    },
+    {
+      "id": "q25",
+      "category": "Hierarchical Heading",
+      "query": "Meeting Notes 2026 > Q3 Product Roadmap > Performance Objectives",
+      "expected_doc": "notes/meetings/2026_roadmap.md",
+      "expected_text_substring": "sub-75ms"
+    }
+  ]
+}
