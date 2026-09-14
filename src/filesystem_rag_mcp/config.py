@@ -23,6 +23,118 @@ class Transport(StrEnum):
     HTTP = "http"
 
 
+class WorkloadProfile(StrEnum):
+    """Supported workload profile identifiers."""
+
+    NOTES = "notes"
+    CODEBASE = "codebase"
+
+
+class ProfileConfig(BaseModel):
+    """Configuration contract for a domain workload profile."""
+
+    name: str
+    description: str
+    default_root: Path
+    allowed_extensions: tuple[str, ...] | None = None
+    enable_symbols: bool = True
+    enable_git: bool = True
+    enable_complex_converters: bool = True
+    enable_ast_breadcrumbs: bool = True
+    ignore_globs: tuple[str, ...] = (
+        "**/.git/**",
+        "**/__pycache__/**",
+        "**/node_modules/**",
+        "**/.venv/**",
+        "**/.filesystem-rag-mcp/**",
+        "**/.DS_Store",
+        "**/.*.swp",
+        "**/.*.swo",
+        "**/.*.swx",
+        "**/.*.un~",
+        "**/*~",
+        "**/*.tmp",
+        "**/.*.tmp",
+        "**/.goutputstream-*",
+        "**/.obsidian/**",
+        "**/.trash/**",
+    )
+
+
+PERSONAL_NOTES_PROFILE = ProfileConfig(
+    name="notes",
+    description="Optimized for Markdown knowledge vaults (defaulting to ~/.local/share/notes)",
+    default_root=Path(os.path.expanduser("~/.local/share/notes")),
+    allowed_extensions=(".md", ".markdown"),
+    enable_symbols=False,
+    enable_git=False,
+    enable_complex_converters=False,
+    enable_ast_breadcrumbs=True,
+    ignore_globs=(
+        "**/.git/**",
+        "**/__pycache__/**",
+        "**/node_modules/**",
+        "**/.venv/**",
+        "**/.filesystem-rag-mcp/**",
+        "**/.DS_Store",
+        "**/.*.swp",
+        "**/.*.swo",
+        "**/.*.swx",
+        "**/.*.un~",
+        "**/*~",
+        "**/*.tmp",
+        "**/.*.tmp",
+        "**/.goutputstream-*",
+        "**/.obsidian/**",
+        "**/.trash/**",
+    ),
+)
+
+GENERAL_CODEBASE_PROFILE = ProfileConfig(
+    name="codebase",
+    description="Expansive multi-format code and documentation intelligence",
+    default_root=Path("."),
+    allowed_extensions=None,
+    enable_symbols=True,
+    enable_git=True,
+    enable_complex_converters=True,
+    enable_ast_breadcrumbs=True,
+    ignore_globs=(
+        "**/.git/**",
+        "**/__pycache__/**",
+        "**/node_modules/**",
+        "**/.venv/**",
+        "**/.filesystem-rag-mcp/**",
+        "**/.DS_Store",
+        "**/.*.swp",
+        "**/.*.swo",
+        "**/.*.swx",
+        "**/.*.un~",
+        "**/*~",
+        "**/*.tmp",
+        "**/.*.tmp",
+        "**/.goutputstream-*",
+        "**/.obsidian/**",
+        "**/.trash/**",
+    ),
+)
+
+PROFILES: dict[str, ProfileConfig] = {
+    "notes": PERSONAL_NOTES_PROFILE,
+    "personal_notes": PERSONAL_NOTES_PROFILE,
+    "personal-notes": PERSONAL_NOTES_PROFILE,
+    "codebase": GENERAL_CODEBASE_PROFILE,
+    "general_codebase": GENERAL_CODEBASE_PROFILE,
+    "general-codebase": GENERAL_CODEBASE_PROFILE,
+}
+
+
+def get_profile_config(profile_name: str) -> ProfileConfig:
+    """Resolve a profile by name (case-insensitive with aliases)."""
+    normalized = profile_name.strip().lower()
+    return PROFILES.get(normalized, GENERAL_CODEBASE_PROFILE)
+
+
 class Settings(BaseModel):
     """Server settings; populated from environment variables.
 
@@ -47,7 +159,11 @@ class Settings(BaseModel):
         description="Path component of the MCP endpoint exposed over HTTP.",
     )
 
-    # ---- filesystem root ----------------------------------------------------
+    # ---- filesystem root & profile -----------------------------------------
+    profile: str = Field(
+        default="codebase",
+        description="Active workload profile: 'notes' or 'codebase'.",
+    )
     root_dir: Path = Field(
         default=Path(os.path.expanduser("~/Documents")),
         description="Root directory the server is permitted to read and index.",
@@ -75,6 +191,16 @@ class Settings(BaseModel):
             "**/.venv/**",
             "**/.filesystem-rag-mcp/**",
             "**/.DS_Store",
+            "**/.*.swp",
+            "**/.*.swo",
+            "**/.*.swx",
+            "**/.*.un~",
+            "**/*~",
+            "**/*.tmp",
+            "**/.*.tmp",
+            "**/.goutputstream-*",
+            "**/.obsidian/**",
+            "**/.trash/**",
         )
     )
 
@@ -151,7 +277,7 @@ class Settings(BaseModel):
 
     @classmethod
     def from_env(cls, env: dict[str, str] | None = None) -> Settings:
-        """Build a Settings instance from `FS_RAG_*` or `FSRAG_*` environment variables.
+        """Build a Settings instance from `FS_RAG_*`, `FSRAG_*`, `FILESYSTEM_RAG_*`, or `MCP_RAG_*` environment variables.
 
         Only variables that are actually set are honored; everything else
         keeps its default. This lets the server run with zero config in dev.
@@ -164,9 +290,23 @@ class Settings(BaseModel):
                 short = key[7:]
             elif key.startswith("FSRAG_"):
                 short = key[6:]
+            elif key.startswith("FILESYSTEM_RAG_"):
+                short = key[15:]
+            elif key.startswith("MCP_RAG_"):
+                short = key[8:]
             if short is None:
                 continue
             mapping[_env_key_to_field(short)] = _coerce(short, value)
+
+        # Apply profile-specific default root_dir if not explicitly overridden in env
+        profile_name = mapping.get("profile", "codebase")
+        if "root_dir" not in mapping and profile_name in {
+            "notes",
+            "personal_notes",
+            "personal-notes",
+        }:
+            mapping["root_dir"] = PERSONAL_NOTES_PROFILE.default_root
+
         return cls(**mapping)
 
 
@@ -188,6 +328,7 @@ def _coerce(short: str, raw: str) -> object:
         "OAUTH_ISSUER",
         "OAUTH_SECRET",
         "LOG_LEVEL",
+        "PROFILE",
     }:
         return raw
     if short in {

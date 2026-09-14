@@ -90,8 +90,54 @@ SUPPORTED_CONVERTIBLE_EXTENSIONS: frozenset[str] = frozenset(
 )
 
 
+def is_editor_artifact(path: Path | str) -> bool:
+    """Check if a file or path matches editor temporary, swap, undo, or backup patterns.
+
+    Detects:
+      - Vim/Neovim swap files (.*.swp, .*.swo, .*.swx)
+      - Persistent undo files (.*.un~)
+      - Backup files (*~)
+      - Temporary files (*.tmp, .*.tmp, *.temp)
+      - Atomic write artifacts (.goutputstream-*)
+      - Standard hidden metadata directories (.git, .obsidian, .trash, .fsrag, etc.)
+    """
+    p = Path(path)
+    name = p.name
+    # Vim/Neovim swap files
+    if name.startswith(".") and any(name.endswith(ext) for ext in (".swp", ".swo", ".swx")):
+        return True
+    # Vim persistent undo files
+    if name.startswith(".") and name.endswith(".un~"):
+        return True
+    # Emacs / generic backup files
+    if name.endswith("~"):
+        return True
+    # Temp files
+    if name.endswith(".tmp") or name.endswith(".temp"):
+        return True
+    # Atomic write artifacts (glib/goutputstream, tmp writes)
+    if name.startswith(".goutputstream-") or (name.startswith(".") and name.endswith(".tmp")):
+        return True
+    # Hidden system / editor metadata directories in parts
+    for part in p.parts:
+        if part in {
+            ".git",
+            ".obsidian",
+            ".trash",
+            ".fsrag",
+            ".filesystem-rag-mcp",
+            ".venv",
+            "__pycache__",
+            "node_modules",
+        }:
+            return True
+    return False
+
+
 def is_indexable_file(path: Path, allow_binary: bool = False) -> bool:
     """Check if file can be indexed using deep content-type detection."""
+    if is_editor_artifact(path):
+        return False
     type_info = detect_file_type(path)
     if type_info.is_convertible or type_info.is_text:
         return True
