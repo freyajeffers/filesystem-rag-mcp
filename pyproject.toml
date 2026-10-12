@@ -34,7 +34,7 @@ dependencies = [
     # OAuth 2.1 server primitives
     "authlib>=1.8.0",
     # JWT issuance + audience/issuer validation (RFC 7519, RFC 9068-style)
-    "pyjwt[crypto]>=2.13.0",
+    "pyjwt[crypto]>=2.15.0",
     # Full-text search engine — embedded, zero-config, pure Python
     "whoosh>=2.7.4",
     # Vector store — embedded, zero-config
@@ -68,6 +68,9 @@ dependencies = [
     "flashrank>=0.2.10",
     # Path security
     "pathvalidate>=3.3.1",
+    "multidict>=6.9.1",
+    "oauthlib>=4.0.0",
+    "urllib3>=2.8.0", 
 ]
 
 [project.optional-dependencies]
